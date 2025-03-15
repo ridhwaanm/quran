@@ -86,4 +86,33 @@ class QuranRepository(private val context: Context) {
         val bookmarksJson = gson.toJson(bookmarks)
         sharedPreferences.edit().putString("bookmarks", bookmarksJson).apply()
     }
+
+    fun saveCurrentPage(page: Int) {
+        sharedPreferences.edit().putInt("last_page", page).apply()
+    }
+
+    fun getLastSavedPage(): Int {
+        return sharedPreferences.getInt("last_page", 4)
+    }
+
+    // Add these new methods for memorization settings
+    fun saveMemorizationSettings(settings: MemorizationSettings) {
+        val settingsJson = gson.toJson(settings)
+        sharedPreferences.edit().putString("memorization_settings", settingsJson).apply()
+    }
+
+    fun getLastMemorizationSettings(): MemorizationSettings? {
+        val settingsJson = sharedPreferences.getString("memorization_settings", null) ?: return null
+        return try {
+            gson.fromJson(settingsJson, MemorizationSettings::class.java)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // Helper function to get the Surah object from a surah number
+    fun getSurahByNumber(surahNumber: Int): Surah? {
+        val metadata = loadQuranMetadata()
+        return metadata.surahs.find { it.number == surahNumber }
+    }
 }
