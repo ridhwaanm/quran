@@ -38,7 +38,9 @@ data class Bookmark(
         val juzNumber: Int,
         val surahName: String,
         val createdAt: Long,
-        val ayahRef: String? = null
+        val ayahRef: String? = null,
+        val surahNumber: Int? = null,
+        val ayahNumber: Int? = null
 ) {
     val displayName: String
         get() =
@@ -75,18 +77,33 @@ class QuranRepository(private val context: Context) {
     // Add a bookmark
     fun addBookmark(bookmark: Bookmark) {
         val currentBookmarks = getBookmarks().toMutableList()
-        // Remove existing bookmark for the same page if it exists
-        currentBookmarks.removeIf { it.page == bookmark.page }
+
+        // If this is an ayah bookmark, remove any existing bookmarks for the same ayah
+        if (bookmark.ayahRef != null) {
+            currentBookmarks.removeIf { it.ayahRef == bookmark.ayahRef }
+        } else {
+            // For page bookmarks, remove existing bookmark for the same page
+            currentBookmarks.removeIf { it.page == bookmark.page && it.ayahRef == null }
+        }
+
         // Add the new bookmark
         currentBookmarks.add(bookmark)
+
         // Save updated bookmarks
         saveBookmarks(currentBookmarks)
     }
 
-    // Remove a bookmark
     fun removeBookmark(bookmark: Bookmark) {
         val currentBookmarks = getBookmarks().toMutableList()
-        currentBookmarks.removeIf { it.page == bookmark.page }
+
+        if (bookmark.ayahRef != null) {
+            // Remove by ayah reference for ayah bookmarks
+            currentBookmarks.removeIf { it.ayahRef == bookmark.ayahRef }
+        } else {
+            // Remove by page for page bookmarks
+            currentBookmarks.removeIf { it.page == bookmark.page && it.ayahRef == null }
+        }
+
         saveBookmarks(currentBookmarks)
     }
 

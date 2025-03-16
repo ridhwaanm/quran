@@ -471,4 +471,21 @@ class AyahInteractionHandler(
                     }
                 }
             }
+
+    /**
+     * Get rectangles for a specific ayah on the current page
+     * @param context Android context
+     * @param pageNumber The page number
+     * @param ayahRef The ayah reference (e.g. "2:30")
+     * @param displaySize Current display size
+     * @return List of rectangles where the ayah appears on the page
+     */
+    suspend fun getAyahRects(
+            context: Context,
+            pageNumber: Int,
+            ayahRef: String,
+            displaySize: Size
+    ): List<android.graphics.Rect> {
+        return coordinateMapper.getAyahRects(context, pageNumber, ayahRef, displaySize)
+    }
 }

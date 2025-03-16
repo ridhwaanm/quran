@@ -380,26 +380,130 @@ fun BookmarksTab(
         Box(
                 modifier = Modifier.fillMaxWidth().height(300.dp),
                 contentAlignment = Alignment.Center
-        ) { Text("No bookmarks yet. Long-press on a page to create a bookmark.") }
+        ) { Text("No bookmarks yet. Long-press on a page or ayah to create a bookmark.") }
     } else {
-        LazyColumn(modifier = Modifier.fillMaxWidth().height(300.dp)) {
-            items(bookmarks.sortedByDescending { it.createdAt }) { bookmark ->
-                BookmarkItem(
-                        bookmark = bookmark,
-                        onClick = { onBookmarkSelected(bookmark) },
-                        onRemove = { onRemoveBookmark(bookmark) }
+        // Group bookmarks by type
+        val pageBookmarks = bookmarks.filter { it.ayahRef == null }
+        val ayahBookmarks = bookmarks.filter { it.ayahRef != null }
+
+        Column(modifier = Modifier.fillMaxWidth().height(300.dp)) {
+            // Only show tabs if we have both types of bookmarks
+            if (pageBookmarks.isNotEmpty() && ayahBookmarks.isNotEmpty()) {
+                var selectedTabIndex by remember { mutableIntStateOf(0) }
+                val tabs = listOf("Pages", "Ayahs")
+
+                TabRow(selectedTabIndex = selectedTabIndex) {
+                    tabs.forEachIndexed { index, title ->
+                        Tab(
+                                selected = selectedTabIndex == index,
+                                onClick = { selectedTabIndex = index },
+                                text = { Text(title) }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Show the appropriate bookmarks based on tab selection
+                when (selectedTabIndex) {
+                    0 ->
+                            BookmarksList(
+                                    bookmarks = pageBookmarks.sortedByDescending { it.createdAt },
+                                    onBookmarkSelected = onBookmarkSelected,
+                                    onRemoveBookmark = onRemoveBookmark
+                            )
+                    1 ->
+                            BookmarksList(
+                                    bookmarks = ayahBookmarks.sortedByDescending { it.createdAt },
+                                    onBookmarkSelected = onBookmarkSelected,
+                                    onRemoveBookmark = onRemoveBookmark
+                            )
+                }
+            } else {
+                // If we only have one type of bookmarks, show all without tabs
+                BookmarksList(
+                        bookmarks = bookmarks.sortedByDescending { it.createdAt },
+                        onBookmarkSelected = onBookmarkSelected,
+                        onRemoveBookmark = onRemoveBookmark
                 )
-                HorizontalDivider()
             }
         }
     }
 }
 
 @Composable
+fun BookmarksList(
+        bookmarks: List<Bookmark>,
+        onBookmarkSelected: (Bookmark) -> Unit,
+        onRemoveBookmark: (Bookmark) -> Unit
+) {
+    LazyColumn(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
+        items(bookmarks) { bookmark ->
+            BookmarkItem(
+                    bookmark = bookmark,
+                    onClick = { onBookmarkSelected(bookmark) },
+                    onRemove = { onRemoveBookmark(bookmark) }
+            )
+            HorizontalDivider()
+        }
+    }
+}
+
+@Composable
 fun BookmarkItem(bookmark: Bookmark, onClick: () -> Unit, onRemove: () -> Unit) {
+    val isAyahBookmark = bookmark.ayahRef != null
+
+    ListItem(
+            headlineContent = {
+                if (isAyahBookmark) {
+                    Text("${bookmark.surahName}, Ayah ${bookmark.ayahRef}")
+                } else {
+                    Text("${bookmark.surahName} (Juz ${bookmark.juzNumber})")
+                }
+            },
+            supportingContent = {
+                if (isAyahBookmark) {
+                    Text("Page ${bookmark.page}, Juz ${bookmark.juzNumber}")
+                } else {
+                    Text("Page ${bookmark.page}")
+                }
+            },
+            trailingContent = {
+                IconButton(onClick = onRemove) {
+                    Icon(
+                            imageVector = Icons.Filled.BookmarkBorder,
+                            contentDescription = "Remove Bookmark"
+                    )
+                }
+            },
+            modifier = Modifier.clickable(onClick = onClick)
+    )
+}
+
+@Composable
+fun PageBookmarkItem(bookmark: Bookmark, onClick: () -> Unit, onRemove: () -> Unit) {
     ListItem(
             headlineContent = { Text("${bookmark.surahName} (Juz ${bookmark.juzNumber})") },
             supportingContent = { Text("Page ${bookmark.page}") },
+            trailingContent = {
+                IconButton(onClick = onRemove) {
+                    Icon(
+                            imageVector = Icons.Filled.BookmarkBorder,
+                            contentDescription = "Remove Bookmark"
+                    )
+                }
+            },
+            modifier = Modifier.clickable(onClick = onClick)
+    )
+}
+
+@Composable
+fun AyahBookmarkItem(bookmark: Bookmark, onClick: () -> Unit, onRemove: () -> Unit) {
+    val ayahRef = bookmark.ayahRef ?: ""
+
+    ListItem(
+            headlineContent = { Text("${bookmark.surahName}, Ayah ${ayahRef}") },
+            supportingContent = { Text("Page ${bookmark.page}, Juz ${bookmark.juzNumber}") },
             trailingContent = {
                 IconButton(onClick = onRemove) {
                     Icon(
