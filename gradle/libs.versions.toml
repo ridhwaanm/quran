@@ -9,16 +9,18 @@ appcompat = "1.7.0"
 material = "1.12.0"
 activity = "1.10.1"
 constraintlayout = "2.2.1"
-# Add Compose versions
-composeBom = "2025.02.00"
+# Compose versions
+composeBom = "2025.03.00"
 activityCompose = "1.10.1"
-navigationCompose = "2.8.8"
+navigationCompose = "2.8.9"
 coilCompose = "2.5.0"
 gson = "2.10.1"
-kotlinxSerialization = "1.5.1"
-lifecycleViewmodelCompose = "2.7.0"
-# Add animation version reference
-composeAnimation = "1.7.0-beta01"
+kotlinxSerialization = "1.6.3"
+lifecycleViewmodelCompose = "2.8.7"
+composeAnimation = "1.7.8"
+jsoup = "1.19.1"
+# DataStore versions
+datastorePreferences = "1.1.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -46,8 +48,11 @@ androidx-compose-foundation-layout = { group = "androidx.compose.foundation", na
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coilCompose" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
-# Add animation library
 androidx-compose-animation = { group = "androidx.compose.animation", name = "animation", version.ref = "composeAnimation" }
+jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
+# DataStore dependencies
+androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastorePreferences" }
+androidx-datastore-preferences-core = { group = "androidx.datastore", name = "datastore-preferences-core", version.ref = "datastorePreferences" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

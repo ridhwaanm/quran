@@ -118,7 +118,7 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
     fun showNavigationTemporarily() {
         // If user prefers to keep nav bar visible, don't hide it
         if (userPreferences.keepNavigationBarVisible) {
-            isNavigationVisible = true
+            isNavigationVisible = userPreferences.keepNavigationBarVisible
             return
         }
 
@@ -585,7 +585,7 @@ fun QuranPageContent(
             Box(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
                 Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center) {
                     Box(modifier = Modifier.weight(1f, fill = false)) {
-                        if (leftPage <= 604 && leftPage >= 1) {
+                        if (leftPage <= 850 && leftPage >= 1) {
                             SubcomposeAsyncImage(
                                     model =
                                             ImageRequest.Builder(LocalContext.current)
@@ -614,7 +614,7 @@ fun QuranPageContent(
 
                     // Right page (even numbered)
                     Box(modifier = Modifier.weight(1f, fill = false)) {
-                        if (rightPage >= 1 && rightPage <= 604) {
+                        if (rightPage >= 1 && rightPage <= 850) {
                             SubcomposeAsyncImage(
                                     model =
                                             ImageRequest.Builder(LocalContext.current)
@@ -720,11 +720,25 @@ fun AyahBookmarkIndicator(
     val context = LocalContext.current
     var rectState by remember { mutableStateOf<android.graphics.Rect?>(null) }
 
+    // Add debug logging
+    LaunchedEffect(Unit) {
+        android.util.Log.d(
+                "AyahBookmark",
+                "Indicator created for ayah: $ayahRef on page $currentPage"
+        )
+    }
+
     // Get ayah position when the component is first composed or when key parameters change
     LaunchedEffect(ayahRef, currentPage, imageSize) {
         if (imageSize.width > 0 && imageSize.height > 0) {
             val rects =
                     ayahInteractionHandler.getAyahRects(context, currentPage, ayahRef, imageSize)
+
+            // Log the results
+            android.util.Log.d("AyahBookmark", "Got rects for $ayahRef: ${rects.size} rects")
+            if (rects.isNotEmpty()) {
+                android.util.Log.d("AyahBookmark", "First rect: ${rects.first()}")
+            }
 
             // Store the first rect if available
             if (rects.isNotEmpty()) {
@@ -735,17 +749,25 @@ fun AyahBookmarkIndicator(
 
     // Only show the bookmark icon if we have a valid rect position
     rectState?.let { rect ->
+        // Log when we're about to draw
+        LaunchedEffect(rect) {
+            android.util.Log.d("AyahBookmark", "Drawing bookmark at rect: $rect")
+        }
+
+        // Use the same pattern as the page bookmark (IconButton directly with modifiers)
         IconButton(
                 onClick = onRemoveBookmark,
                 modifier =
-                        Modifier.offset(x = rect.right.dp - 15.dp, y = rect.top.dp)
+                        Modifier
+                                // Position at the right edge of the ayah
+                                .offset(x = rect.right.dp - 20.dp, y = rect.top.dp)
                                 .size(20.dp)
-                                .zIndex(10f)
+                                .zIndex(9999f) // Use extremely high z-index like the page bookmark
         ) {
             Icon(
                     imageVector = Icons.Filled.Bookmark,
                     contentDescription = "Ayah Bookmarked",
-                    tint = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f),
+                    tint = MaterialTheme.colorScheme.secondary, // Solid color without alpha
                     modifier = Modifier.size(20.dp)
             )
         }
