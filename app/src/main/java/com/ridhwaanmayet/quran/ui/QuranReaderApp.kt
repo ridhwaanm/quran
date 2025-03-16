@@ -1,8 +1,5 @@
 package com.ridhwaanmayet.quran.ui
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.content.res.Configuration
 import android.view.WindowManager
 import android.widget.Toast
@@ -54,7 +51,7 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
 
     // Initialize repositories and handlers
     val quranRepository = remember { QuranRepository(context) }
-    val ayahInteractionHandler = remember { AyahInteractionHandler(context) }
+    val ayahInteractionHandler = remember { AyahInteractionHandler(context, quranRepository) }
 
     // Load metadata
     val quranMetadata = remember { quranRepository.loadQuranMetadata() }
@@ -164,26 +161,30 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
 
     // Function to handle ayah long press
     fun handleAyahLongPress(ayahRef: String) {
-        selectedAyahRef = ayahRef
-        showAyahDialog = true
+        // Create bookmark immediately instead of showing dialog
+        val currentJuz =
+                quranMetadata.juzs.findLast { it.startPage <= currentPage }
+                        ?: quranMetadata.juzs.first()
+
+        val surahNumber = ayahRef.take(3).toIntOrNull() ?: 1
+        val surahName =
+                quranMetadata.surahs.find { it.number == surahNumber }?.englishName ?: "Unknown"
+
+        val bookmark =
+                Bookmark(
+                        page = currentPage,
+                        juzNumber = currentJuz.number,
+                        surahName = surahName,
+                        createdAt = System.currentTimeMillis()
+                )
+
+        coroutineScope.launch {
+            viewModel.addBookmark(quranRepository, bookmark)
+            Toast.makeText(context, "Bookmark added for $surahName", Toast.LENGTH_SHORT).show()
+        }
 
         // Reset screen timeout on long press interaction
         resetScreenTimeout()
-    }
-
-    // Copy ayah text to clipboard
-    fun copyAyahToClipboard(ayahRef: String) {
-        val clipboardManager =
-                context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("Quran Ayah", "Ayah reference: $ayahRef")
-        clipboardManager.setPrimaryClip(clip)
-        Toast.makeText(context, "Ayah copied to clipboard", Toast.LENGTH_SHORT).show()
-    }
-
-    // Recite ayah (placeholder function)
-    fun reciteAyah(ayahRef: String) {
-        // In a real implementation, this would play audio for the selected ayah
-        Toast.makeText(context, "Reciting ayah $ayahRef", Toast.LENGTH_SHORT).show()
     }
 
     // Apply screen wake lock flag based on keepScreenOn state
@@ -202,6 +203,7 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
     LaunchedEffect(Unit) {
         viewModel.loadBookmarks(quranRepository)
         viewModel.loadLastSavedPage(quranRepository)
+        ayahInteractionHandler.initializeAyahPositions()
         showNavigationTemporarily()
         resetScreenTimeout() // Initialize screen timeout
     }
@@ -340,13 +342,18 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
                                 isLandscape = isLandscape,
                                 isBookmarked = isCurrentPageBookmarked,
                                 showBottomPadding = false,
-                                onAddBookmark = {
-                                    // This would be implemented if you wanted to add bookmark from
-                                    // here
-                                },
+                                onAddBookmark = {},
                                 onRemoveBookmark = {
-                                    // This would be implemented if you wanted to remove bookmark
-                                    // from here
+                                    // Only attempt to remove if the page is bookmarked
+                                    if (isCurrentPageBookmarked) {
+                                        val bookmarkToRemove =
+                                                bookmarks.find { it.page == currentPage }
+                                        bookmarkToRemove?.let {
+                                            coroutineScope.launch {
+                                                viewModel.removeBookmark(quranRepository, it)
+                                            }
+                                        }
+                                    }
                                 }
                         )
                     }
@@ -479,23 +486,6 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
                                 viewModel.removeBookmark(quranRepository, bookmark)
                             }
                         }
-                )
-            }
-
-            // Ayah Options Dialog
-            if (showAyahDialog) {
-                AyahBookmarkDialog(
-                        ayahRef = selectedAyahRef,
-                        currentPage = currentPage,
-                        quranMetadata = quranMetadata,
-                        onDismiss = { showAyahDialog = false },
-                        onAddBookmark = { bookmark ->
-                            coroutineScope.launch {
-                                viewModel.addBookmark(quranRepository, bookmark)
-                            }
-                        },
-                        onReciteAyah = { ayahRef -> reciteAyah(ayahRef) },
-                        onCopyAyah = { ayahRef -> copyAyahToClipboard(ayahRef) }
                 )
             }
         }
