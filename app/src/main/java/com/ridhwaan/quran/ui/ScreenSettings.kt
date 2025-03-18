@@ -54,7 +54,7 @@ fun SettingsScreen(
             // App Interface Settings Section
             SettingsSectionHeader(title = "App Interface")
 
-            // Navigation Bar Setting - This is the only toggle we're keeping
+            // Navigation Bar Setting
             SettingsSwitchItem(
                     title = "Keep Navigation Bar Visible",
                     description = "Always show the navigation bar instead of auto-hiding it",
@@ -63,6 +63,20 @@ fun SettingsScreen(
                     onCheckedChange = { isChecked ->
                         onUpdatePreferences(
                                 userPreferences.copy(keepNavigationBarVisible = isChecked)
+                        )
+                    }
+            )
+
+            // Landscape Display Mode Setting
+            SettingsSwitchItem(
+                    title = "Dual Page in Landscape",
+                    description =
+                            "Display two pages side by side in landscape mode (toggle off to use full width for single page)",
+                    icon = Icons.Filled.AutoStories,
+                    checked = userPreferences.useDualPageInLandscape,
+                    onCheckedChange = { isChecked ->
+                        onUpdatePreferences(
+                                userPreferences.copy(useDualPageInLandscape = isChecked)
                         )
                     }
             )
@@ -116,7 +130,7 @@ fun SettingsSwitchItem(
         onCheckedChange: (Boolean) -> Unit
 ) {
     Row(
-            modifier = Modifier.fillMaxSize().padding(vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(

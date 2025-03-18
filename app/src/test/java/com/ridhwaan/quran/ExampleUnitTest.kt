@@ -1,4 +1,4 @@
-package com.ridhwaanmayet.quran
+package com.ridhwaan.quran
 
 import org.junit.Assert.*
 import org.junit.Test

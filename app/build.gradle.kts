@@ -6,14 +6,14 @@ plugins {
 }
 
 android {
-    namespace = "com.ridhwaanmayet.quran"
+    namespace = "com.ridhwaan.quran"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.ridhwaanmayet.quran"
+        applicationId = "com.ridhwaan.quran"
         minSdk = 33
         targetSdk = 35
-        versionCode = 2
+        versionCode = 3
         versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

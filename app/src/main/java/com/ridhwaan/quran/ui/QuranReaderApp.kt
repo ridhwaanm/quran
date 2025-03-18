@@ -339,6 +339,11 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
                                         imageSize = pageImageSize // Update the outer imageSize
                                     }
                     ) {
+                        // This is a snippet showing just the change needed in the QuranReaderApp
+                        // function
+                        // where it calls QuranPageContent
+
+                        // Find this section in the original code where QuranPageContent is called
                         QuranPageContent(
                                 currentPage = currentPage,
                                 isLandscape = isLandscape,
@@ -378,7 +383,9 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
                                 // Pass the bookmarks list
                                 bookmarks = bookmarks,
                                 // Pass the ayah interaction handler
-                                ayahInteractionHandler = ayahInteractionHandler
+                                ayahInteractionHandler = ayahInteractionHandler,
+                                // Pass the landscape display preference
+                                useDualPageInLandscape = userPreferences.useDualPageInLandscape
                         )
                     }
                 }
@@ -555,7 +562,8 @@ fun QuranPageContent(
         onAddBookmark: () -> Unit,
         onRemoveBookmark: (Bookmark?) -> Unit,
         bookmarks: List<Bookmark> = emptyList(),
-        ayahInteractionHandler: AyahInteractionHandler? = null
+        ayahInteractionHandler: AyahInteractionHandler? = null,
+        useDualPageInLandscape: Boolean = true // Default to true for backward compatibility
 ) {
     var imageSize by remember { mutableStateOf(Size.Zero) }
     val context = LocalContext.current
@@ -564,7 +572,7 @@ fun QuranPageContent(
     // Log current page and bookmark status
     android.util.Log.d(
             tag,
-            "Loading page $currentPage, isBookmarked: $isBookmarked, landscape: $isLandscape"
+            "Loading page $currentPage, isBookmarked: $isBookmarked, landscape: $isLandscape, useDualPage: $useDualPageInLandscape"
     )
     android.util.Log.d(tag, "Total bookmarks: ${bookmarks.size}")
 
@@ -659,79 +667,123 @@ fun QuranPageContent(
                         imageSize = newSize
                     }
     ) {
-        // Display Quran page based on orientation
+        // Display Quran page based on orientation and preferences
         if (isLandscape) {
-            // Landscape mode - show two pages side by side
-            val scrollState = rememberScrollState()
+            if (useDualPageInLandscape) {
+                // Dual page landscape mode - show two pages side by side
+                val scrollState = rememberScrollState()
 
-            val rightPage = if (currentPage % 2 == 0) currentPage else currentPage - 1
-            val leftPage = if (currentPage % 2 == 0) currentPage + 1 else currentPage
+                val rightPage = if (currentPage % 2 == 0) currentPage else currentPage - 1
+                val leftPage = if (currentPage % 2 == 0) currentPage + 1 else currentPage
 
-            android.util.Log.d(tag, "Landscape mode - left page: $leftPage, right page: $rightPage")
+                android.util.Log.d(
+                        tag,
+                        "Landscape dual page mode - left page: $leftPage, right page: $rightPage"
+                )
 
-            // Scrollable container for the two pages
-            Box(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
-                Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center) {
-                    Box(modifier = Modifier.weight(1f, fill = false)) {
-                        if (leftPage <= 850 && leftPage >= 1) {
-                            SubcomposeAsyncImage(
-                                    model =
-                                            ImageRequest.Builder(LocalContext.current)
-                                                    .data(
-                                                            "file:///android_asset/Images/${
-                                                leftPage.toString().padStart(3, '0')
-                                            }.webp"
-                                                    )
-                                                    .build(),
-                                    contentDescription = "Quran page $leftPage",
-                                    modifier =
-                                            Modifier.fillMaxHeight()
-                                                    .wrapContentWidth()
-                                                    .align(Alignment.Center),
-                                    contentScale = ContentScale.Fit,
-                                    error = {
-                                        Text(
-                                                text = "Could not load image",
-                                                color = Color.Red,
-                                                modifier = Modifier.align(Alignment.Center)
-                                        )
-                                    }
-                            )
+                // Scrollable container for the two pages
+                Box(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
+                    Row(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalArrangement = Arrangement.Center
+                    ) {
+                        Box(modifier = Modifier.weight(1f, fill = false)) {
+                            if (leftPage <= 850 && leftPage >= 1) {
+                                SubcomposeAsyncImage(
+                                        model =
+                                                ImageRequest.Builder(LocalContext.current)
+                                                        .data(
+                                                                "file:///android_asset/Images/${
+                                                    leftPage.toString().padStart(3, '0')
+                                                }.webp"
+                                                        )
+                                                        .build(),
+                                        contentDescription = "Quran page $leftPage",
+                                        modifier =
+                                                Modifier.fillMaxHeight()
+                                                        .wrapContentWidth()
+                                                        .align(Alignment.Center),
+                                        contentScale = ContentScale.Fit,
+                                        error = {
+                                            Text(
+                                                    text = "Could not load image",
+                                                    color = Color.Red,
+                                                    modifier = Modifier.align(Alignment.Center)
+                                            )
+                                        }
+                                )
+                            }
+                        }
+
+                        // Right page (even numbered)
+                        Box(modifier = Modifier.weight(1f, fill = false)) {
+                            if (rightPage >= 1 && rightPage <= 850) {
+                                SubcomposeAsyncImage(
+                                        model =
+                                                ImageRequest.Builder(LocalContext.current)
+                                                        .data(
+                                                                "file:///android_asset/Images/${
+                                                    rightPage.toString().padStart(3, '0')
+                                                }.webp"
+                                                        )
+                                                        .build(),
+                                        contentDescription = "Quran page $rightPage",
+                                        modifier =
+                                                Modifier.fillMaxHeight()
+                                                        .wrapContentWidth()
+                                                        .align(Alignment.Center),
+                                        contentScale = ContentScale.Fit,
+                                        error = {
+                                            Text(
+                                                    text = "Could not load image",
+                                                    color = Color.Red,
+                                                    modifier = Modifier.align(Alignment.Center)
+                                            )
+                                        }
+                                )
+                            }
                         }
                     }
+                }
+            } else {
+                // Single page landscape mode with max width while preserving aspect ratio
+                android.util.Log.d(tag, "Landscape single page mode: $currentPage")
+                val scrollState = rememberScrollState()
 
-                    // Right page (even numbered)
-                    Box(modifier = Modifier.weight(1f, fill = false)) {
-                        if (rightPage >= 1 && rightPage <= 850) {
-                            SubcomposeAsyncImage(
-                                    model =
-                                            ImageRequest.Builder(LocalContext.current)
-                                                    .data(
-                                                            "file:///android_asset/Images/${
-                                                rightPage.toString().padStart(3, '0')
-                                            }.webp"
-                                                    )
-                                                    .build(),
-                                    contentDescription = "Quran page $rightPage",
-                                    modifier =
-                                            Modifier.fillMaxHeight()
-                                                    .wrapContentWidth()
-                                                    .align(Alignment.Center),
-                                    contentScale = ContentScale.Fit,
-                                    error = {
-                                        Text(
-                                                text = "Could not load image",
-                                                color = Color.Red,
-                                                modifier = Modifier.align(Alignment.Center)
-                                        )
-                                    }
-                            )
-                        }
+                Box(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
+                    Box(
+                            modifier =
+                                    Modifier.fillMaxWidth()
+                                            .aspectRatio(0.7f)
+                                            .align(
+                                                    Alignment.Center
+                                            ) // Approximate aspect ratio for Quran pages
+                    ) {
+                        SubcomposeAsyncImage(
+                                model =
+                                        ImageRequest.Builder(LocalContext.current)
+                                                .data(
+                                                        "file:///android_asset/Images/${
+                                        currentPage.toString().padStart(3, '0')
+                                    }.webp"
+                                                )
+                                                .build(),
+                                contentDescription = "Quran page $currentPage",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Fit,
+                                error = {
+                                    Text(
+                                            text = "Could not load image",
+                                            color = Color.Red,
+                                            modifier = Modifier.align(Alignment.Center)
+                                    )
+                                }
+                        )
                     }
                 }
             }
         } else {
-            // Portrait mode - center the image with correct aspect ratio
+            // Portrait mode - center the image with correct aspect ratio (unchanged)
             android.util.Log.d(tag, "Portrait mode - single page: $currentPage")
             Box(modifier = Modifier.fillMaxSize()) {
                 SubcomposeAsyncImage(

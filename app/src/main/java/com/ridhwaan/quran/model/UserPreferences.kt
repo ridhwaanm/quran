@@ -9,8 +9,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 
-// Data class to represent user preferences - simplified to only include navigation bar visibility
-data class UserPreferences(val keepNavigationBarVisible: Boolean = false)
+// Data class to represent user preferences - now with landscape display preference
+data class UserPreferences(
+        val keepNavigationBarVisible: Boolean = false,
+        val useDualPageInLandscape: Boolean = true // Default to dual page view (current behavior)
+)
 
 // Extension property for Context to access DataStore
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "user_preferences")
@@ -18,9 +21,10 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "us
 // Repository class to manage user preferences
 class UserPreferencesRepository(private val context: Context) {
 
-    // Define key for navigation bar visibility preference
+    // Define keys for preferences
     private object PreferencesKeys {
         val KEEP_NAV_BAR_VISIBLE = booleanPreferencesKey("keep_nav_bar_visible")
+        val USE_DUAL_PAGE_IN_LANDSCAPE = booleanPreferencesKey("use_dual_page_in_landscape")
     }
 
     // Get the preferences as a Flow
@@ -38,7 +42,10 @@ class UserPreferencesRepository(private val context: Context) {
                         // Map preferences to our data class
                         UserPreferences(
                                 keepNavigationBarVisible =
-                                        preferences[PreferencesKeys.KEEP_NAV_BAR_VISIBLE] ?: false
+                                        preferences[PreferencesKeys.KEEP_NAV_BAR_VISIBLE] ?: false,
+                                useDualPageInLandscape =
+                                        preferences[PreferencesKeys.USE_DUAL_PAGE_IN_LANDSCAPE]
+                                                ?: true
                         )
                     }
 
@@ -49,11 +56,20 @@ class UserPreferencesRepository(private val context: Context) {
         }
     }
 
-    // Update all preferences at once (only navigation bar in this case)
+    // Update useDualPageInLandscape preference
+    suspend fun updateUseDualPageInLandscape(useDualPage: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.USE_DUAL_PAGE_IN_LANDSCAPE] = useDualPage
+        }
+    }
+
+    // Update all preferences at once
     suspend fun updatePreferences(userPreferences: UserPreferences) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.KEEP_NAV_BAR_VISIBLE] =
                     userPreferences.keepNavigationBarVisible
+            preferences[PreferencesKeys.USE_DUAL_PAGE_IN_LANDSCAPE] =
+                    userPreferences.useDualPageInLandscape
         }
     }
 }
