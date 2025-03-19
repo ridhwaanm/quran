@@ -6,15 +6,15 @@ plugins {
 }
 
 android {
-    namespace = "com.ridhwaan.quran"
+    namespace = "com.ridhwaanmayet.quran"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.ridhwaan.quran"
+        applicationId = "com.ridhwaanmayet.quran"
         minSdk = 33
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.0.1"
+        versionCode = 5
+        versionName = "1.0.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -24,8 +24,8 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                    getDefaultProguardFile("proguard-android-optimize.txt"),
+                    "proguard-rules.pro"
             )
         }
     }
@@ -87,3 +87,4 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
+
