@@ -1,3 +1,4 @@
+# Existing entries
 *.iml
 .gradle
 /local.properties
@@ -13,3 +14,9 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Add these new entries
+# Android App Bundle files
+*.aab
+# Release directory
+app/release/

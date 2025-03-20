@@ -75,14 +75,26 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
 
     // Navigation visibility state - now controlled by user preferences
     var isNavigationVisible by remember { mutableStateOf(true) }
-
-    // Update visibility based on user preferences
-    LaunchedEffect(userPreferences.keepNavigationBarVisible) {
-        isNavigationVisible = userPreferences.keepNavigationBarVisible || true
-    }
-
-    // Job for navigation timer
     var navigationTimerJob by remember { mutableStateOf<Job?>(null) }
+
+    LaunchedEffect(userPreferences.keepNavigationBarVisible) {
+        if (userPreferences.keepNavigationBarVisible) {
+            // Immediately show navigation bar when preference is enabled
+            isNavigationVisible = true
+            // Cancel any existing hide timer
+            navigationTimerJob?.cancel()
+        } else {
+            // When preference is disabled, start auto-hide timer if navigation is visible
+            if (isNavigationVisible) {
+                navigationTimerJob?.cancel()
+                navigationTimerJob =
+                    coroutineScope.launch {
+                        delay(5000) // 5 seconds
+                        isNavigationVisible = false
+                    }
+            }
+        }
+    }
 
     // Always keep screen on (as requested - no toggle in settings)
     var keepScreenOn by remember { mutableStateOf(true) }
@@ -90,7 +102,7 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
 
     // Check if current page is bookmarked
     val isCurrentPageBookmarked =
-            remember(currentPage, bookmarks) { bookmarks.any { it.page == currentPage } }
+        remember(currentPage, bookmarks) { bookmarks.any { it.page == currentPage } }
 
     // Get the current orientation
     val configuration = LocalConfiguration.current
@@ -106,10 +118,10 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
 
         // Start new screen timeout timer
         screenTimeoutJob =
-                coroutineScope.launch {
-                    delay(300000) // 300 seconds (5 minutes)
-                    keepScreenOn = false
-                }
+            coroutineScope.launch {
+                delay(300000) // 300 seconds (5 minutes)
+                keepScreenOn = false
+            }
     }
 
     // Function to show navigation and hide after delay if auto-hide is enabled
@@ -128,10 +140,10 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
 
         // Start new timer to hide navigation
         navigationTimerJob =
-                coroutineScope.launch {
-                    delay(5000) // 5 seconds
-                    isNavigationVisible = false
-                }
+            coroutineScope.launch {
+                delay(5000) // 5 seconds
+                isNavigationVisible = false
+            }
 
         // Reset screen timeout whenever there's user interaction
         resetScreenTimeout()
@@ -144,10 +156,10 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
             // seconds
             navigationTimerJob?.cancel()
             navigationTimerJob =
-                    coroutineScope.launch {
-                        delay(5000) // Add another 5 seconds
-                        isNavigationVisible = false
-                    }
+                coroutineScope.launch {
+                    delay(5000) // Add another 5 seconds
+                    isNavigationVisible = false
+                }
         } else {
             // If not visible, just show it with standard timer
             showNavigationTemporarily()
@@ -171,41 +183,41 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
         if (existingBookmark != null) {
             // This ayah is already bookmarked, don't create a duplicate
             android.util.Log.d(
-                    "QuranReaderApp",
-                    "Ayah $ayahRef is already bookmarked, skipping bookmark creation"
+                "QuranReaderApp",
+                "Ayah $ayahRef is already bookmarked, skipping bookmark creation"
             )
             return
         }
 
         // Find the current juz
         val currentJuz =
-                quranMetadata.juzs.findLast { it.startPage <= currentPage }
-                        ?: quranMetadata.juzs.first()
+            quranMetadata.juzs.findLast { it.startPage <= currentPage }
+                ?: quranMetadata.juzs.first()
 
         // Get the correct surah name based on the surah number
         val surahName =
-                quranMetadata.surahs.find { it.number == surahNumber }?.englishName ?: "Unknown"
+            quranMetadata.surahs.find { it.number == surahNumber }?.englishName ?: "Unknown"
 
         val bookmark =
-                Bookmark(
-                        page = currentPage,
-                        juzNumber = currentJuz.number,
-                        surahName = surahName,
-                        createdAt = System.currentTimeMillis(),
-                        ayahRef = ayahRef,
-                        surahNumber = surahNumber,
-                        ayahNumber = ayahNumber
-                )
+            Bookmark(
+                page = currentPage,
+                juzNumber = currentJuz.number,
+                surahName = surahName,
+                createdAt = System.currentTimeMillis(),
+                ayahRef = ayahRef,
+                surahNumber = surahNumber,
+                ayahNumber = ayahNumber
+            )
 
         coroutineScope.launch {
             viewModel.addBookmark(quranRepository, bookmark)
             viewModel.loadBookmarks(quranRepository)
             Toast.makeText(
-                            context,
-                            "Bookmark added for $surahName, Ayah $ayahRef",
-                            Toast.LENGTH_SHORT
-                    )
-                    .show()
+                context,
+                "Bookmark added for $surahName, Ayah $ayahRef",
+                Toast.LENGTH_SHORT
+            )
+                .show()
         }
 
         // Reset screen timeout on long press interaction
@@ -243,11 +255,11 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
     // Settings Screen
     if (showSettingsScreen) {
         SettingsScreen(
-                onNavigateBack = { showSettingsScreen = false },
-                userPreferences = userPreferences,
-                onUpdatePreferences = { newPreferences ->
-                    viewModel.updateUserPreferences(newPreferences)
-                }
+            onNavigateBack = { showSettingsScreen = false },
+            userPreferences = userPreferences,
+            onUpdatePreferences = { newPreferences ->
+                viewModel.updateUserPreferences(newPreferences)
+            }
         )
         return // Return early to show only the settings screen
     }
@@ -257,162 +269,162 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
         // Memorization Screen
         if (showMemorizationScreen) {
             MemorizationScreen(
-                    quranMetadata = quranMetadata,
-                    repository = quranRepository,
-                    lastMemorizedSettings = quranRepository.getLastMemorizationSettings(),
-                    onNavigateBack = { showMemorizationScreen = false },
-                    onStartMemorization = { settings ->
-                        currentMemorizationSettings = settings
-                        quranRepository.saveMemorizationSettings(settings)
-                        showMemorizationScreen = false
-                        showMemorizationPlayer = true
-                    }
+                quranMetadata = quranMetadata,
+                repository = quranRepository,
+                lastMemorizedSettings = quranRepository.getLastMemorizationSettings(),
+                onNavigateBack = { showMemorizationScreen = false },
+                onStartMemorization = { settings ->
+                    currentMemorizationSettings = settings
+                    quranRepository.saveMemorizationSettings(settings)
+                    showMemorizationScreen = false
+                    showMemorizationPlayer = true
+                }
             )
         }
         // Main QuranReaderApp content
         else {
             // The main content
             Box(
-                    modifier =
-                            Modifier.fillMaxSize()
-                                    .padding(
-                                            bottom =
-                                                    if (isNavigationVisible) {
-                                                        // Add additional padding when the player is
-                                                        // showing
-                                                        if (showMemorizationPlayer) 80.dp else 40.dp
-                                                    } else {
-                                                        if (showMemorizationPlayer) 40.dp else 0.dp
-                                                    }
-                                    )
+                modifier =
+                    Modifier.fillMaxSize()
+                        .padding(
+                            bottom =
+                                if (isNavigationVisible) {
+                                    // Add additional padding when the player is
+                                    // showing
+                                    if (showMemorizationPlayer) 80.dp else 40.dp
+                                } else {
+                                    if (showMemorizationPlayer) 40.dp else 0.dp
+                                }
+                        )
             ) {
                 Box(
-                        modifier =
-                                Modifier.fillMaxSize()
-                                        .then(
-                                                ayahInteractionHandler.handleAyahInteractions(
-                                                        currentPage = currentPage,
-                                                        displaySize = imageSize,
-                                                        onTap = { showNavigationTemporarily() },
-                                                        onSwipeLeft = {
-                                                            if (currentPage > 1) {
-                                                                if (isLandscape &&
-                                                                                userPreferences
-                                                                                        .useDualPageInLandscape
-                                                                ) {
-                                                                    currentPage =
-                                                                            maxOf(
-                                                                                    1,
-                                                                                    currentPage - 2
-                                                                            )
-                                                                } else {
-                                                                    currentPage--
-                                                                }
-                                                            }
-                                                            resetScreenTimeout() // Reset on swipe
-                                                        },
-                                                        onSwipeRight = {
-                                                            if (currentPage <
-                                                                            quranMetadata.totalPages
-                                                            ) {
-                                                                // Navigate based on display mode in
-                                                                // landscape
-                                                                if (isLandscape &&
-                                                                                userPreferences
-                                                                                        .useDualPageInLandscape
-                                                                ) {
-                                                                    // In dual page landscape mode,
-                                                                    // navigate by 2 pages
-                                                                    currentPage =
-                                                                            minOf(
-                                                                                    quranMetadata
-                                                                                            .totalPages,
-                                                                                    currentPage + 2
-                                                                            )
-                                                                } else {
-                                                                    // In portrait or single page
-                                                                    // landscape mode, navigate by 1
-                                                                    // page
-                                                                    currentPage++
-                                                                }
-                                                            }
-                                                            resetScreenTimeout() // Reset on swipe
-                                                        },
-                                                        onAyahLongPress = { ayahRef ->
-                                                            handleAyahLongPress(ayahRef)
-                                                        },
-                                                        pageBookmarks =
-                                                                bookmarks.filter {
-                                                                    it.page == currentPage
-                                                                }
-                                                )
-                                        )
+                    modifier =
+                        Modifier.fillMaxSize()
+                            .then(
+                                ayahInteractionHandler.handleAyahInteractions(
+                                    currentPage = currentPage,
+                                    displaySize = imageSize,
+                                    onTap = { showNavigationTemporarily() },
+                                    onSwipeLeft = {
+                                        if (currentPage > 1) {
+                                            if (isLandscape &&
+                                                userPreferences
+                                                    .useDualPageInLandscape
+                                            ) {
+                                                currentPage =
+                                                    maxOf(
+                                                        1,
+                                                        currentPage - 2
+                                                    )
+                                            } else {
+                                                currentPage--
+                                            }
+                                        }
+                                        resetScreenTimeout() // Reset on swipe
+                                    },
+                                    onSwipeRight = {
+                                        if (currentPage <
+                                            quranMetadata.totalPages
+                                        ) {
+                                            // Navigate based on display mode in
+                                            // landscape
+                                            if (isLandscape &&
+                                                userPreferences
+                                                    .useDualPageInLandscape
+                                            ) {
+                                                // In dual page landscape mode,
+                                                // navigate by 2 pages
+                                                currentPage =
+                                                    minOf(
+                                                        quranMetadata
+                                                            .totalPages,
+                                                        currentPage + 2
+                                                    )
+                                            } else {
+                                                // In portrait or single page
+                                                // landscape mode, navigate by 1
+                                                // page
+                                                currentPage++
+                                            }
+                                        }
+                                        resetScreenTimeout() // Reset on swipe
+                                    },
+                                    onAyahLongPress = { ayahRef ->
+                                        handleAyahLongPress(ayahRef)
+                                    },
+                                    pageBookmarks =
+                                        bookmarks.filter {
+                                            it.page == currentPage
+                                        }
+                                )
+                            )
                 ) {
                     // Update to capture the image size
                     var pageImageSize by remember { mutableStateOf(Size.Zero) }
 
                     Box(
-                            modifier =
-                                    Modifier.fillMaxSize().onSizeChanged {
-                                        pageImageSize =
-                                                Size(it.width.toFloat(), it.height.toFloat())
-                                        imageSize = pageImageSize // Update the outer imageSize
-                                    }
+                        modifier =
+                            Modifier.fillMaxSize().onSizeChanged {
+                                pageImageSize =
+                                    Size(it.width.toFloat(), it.height.toFloat())
+                                imageSize = pageImageSize // Update the outer imageSize
+                            }
                     ) {
                         QuranPageContent(
-                                currentPage = currentPage,
-                                isLandscape = isLandscape,
-                                isBookmarked = isCurrentPageBookmarked,
-                                showBottomPadding = false,
-                                onAddBookmark = {},
-                                onRemoveBookmark = { bookmark ->
-                                    coroutineScope.launch {
-                                        if (bookmark != null) {
-                                            // For ayah bookmarks, add to recently removed list
-                                            bookmark.ayahRef?.let { ayahRef ->
-                                                recentlyRemovedAyahRefs.add(ayahRef)
+                            currentPage = currentPage,
+                            isLandscape = isLandscape,
+                            isBookmarked = isCurrentPageBookmarked,
+                            showBottomPadding = false,
+                            onAddBookmark = {},
+                            onRemoveBookmark = { bookmark ->
+                                coroutineScope.launch {
+                                    if (bookmark != null) {
+                                        // For ayah bookmarks, add to recently removed list
+                                        bookmark.ayahRef?.let { ayahRef ->
+                                            recentlyRemovedAyahRefs.add(ayahRef)
 
-                                                // Schedule removal from the protection list after a
-                                                // delay
-                                                launch {
-                                                    delay(1000) // 1-second protection window
-                                                    recentlyRemovedAyahRefs.remove(ayahRef)
-                                                }
-                                            }
-
-                                            // Remove the specific bookmark that was clicked
-                                            viewModel.removeBookmark(quranRepository, bookmark)
-                                            Toast.makeText(
-                                                            context,
-                                                            if (bookmark.ayahRef != null)
-                                                                    "Removed ayah bookmark"
-                                                            else "Removed page bookmark",
-                                                            Toast.LENGTH_SHORT
-                                                    )
-                                                    .show()
-                                        } else {
-                                            // Backward compatibility - remove first bookmark for
-                                            // this page
-                                            val bookmarkToRemove =
-                                                    bookmarks.find { it.page == currentPage }
-                                            bookmarkToRemove?.let {
-                                                viewModel.removeBookmark(quranRepository, it)
-                                                Toast.makeText(
-                                                                context,
-                                                                "Removed bookmark",
-                                                                Toast.LENGTH_SHORT
-                                                        )
-                                                        .show()
+                                            // Schedule removal from the protection list after a
+                                            // delay
+                                            launch {
+                                                delay(1000) // 1-second protection window
+                                                recentlyRemovedAyahRefs.remove(ayahRef)
                                             }
                                         }
+
+                                        // Remove the specific bookmark that was clicked
+                                        viewModel.removeBookmark(quranRepository, bookmark)
+                                        Toast.makeText(
+                                            context,
+                                            if (bookmark.ayahRef != null)
+                                                "Removed ayah bookmark"
+                                            else "Removed page bookmark",
+                                            Toast.LENGTH_SHORT
+                                        )
+                                            .show()
+                                    } else {
+                                        // Backward compatibility - remove first bookmark for
+                                        // this page
+                                        val bookmarkToRemove =
+                                            bookmarks.find { it.page == currentPage }
+                                        bookmarkToRemove?.let {
+                                            viewModel.removeBookmark(quranRepository, it)
+                                            Toast.makeText(
+                                                context,
+                                                "Removed bookmark",
+                                                Toast.LENGTH_SHORT
+                                            )
+                                                .show()
+                                        }
                                     }
-                                },
-                                // Pass the bookmarks list
-                                bookmarks = bookmarks,
-                                // Pass the ayah interaction handler
-                                ayahInteractionHandler = ayahInteractionHandler,
-                                // Pass the landscape display preference
-                                useDualPageInLandscape = userPreferences.useDualPageInLandscape
+                                }
+                            },
+                            // Pass the bookmarks list
+                            bookmarks = bookmarks,
+                            // Pass the ayah interaction handler
+                            ayahInteractionHandler = ayahInteractionHandler,
+                            // Pass the landscape display preference
+                            useDualPageInLandscape = userPreferences.useDualPageInLandscape
                         )
                     }
                 }
@@ -421,139 +433,139 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
             // Memorization Player (when active)
             if (showMemorizationPlayer && currentMemorizationSettings != null) {
                 val surah =
-                        remember(currentMemorizationSettings) {
-                            quranRepository.getSurahByNumber(
-                                    currentMemorizationSettings!!.surahNumber
-                            )
-                                    ?: quranMetadata.surahs.first()
-                        }
+                    remember(currentMemorizationSettings) {
+                        quranRepository.getSurahByNumber(
+                            currentMemorizationSettings!!.surahNumber
+                        )
+                            ?: quranMetadata.surahs.first()
+                    }
 
                 Box(
-                        modifier =
-                                Modifier.align(Alignment.BottomCenter)
-                                        .offset(y = if (isNavigationVisible) (-40).dp else 0.dp)
+                    modifier =
+                        Modifier.align(Alignment.BottomCenter)
+                            .offset(y = if (isNavigationVisible) (-40).dp else 0.dp)
                 ) {
                     MemorizationPlayer(
-                            settings = currentMemorizationSettings!!,
-                            surah = surah,
-                            quranRepository = quranRepository,
-                            onNavigateBack = { showMemorizationPlayer = false },
-                            onSaveProgress = { updatedSettings ->
-                                currentMemorizationSettings = updatedSettings
-                                quranRepository.saveMemorizationSettings(updatedSettings)
-                            },
-                            onNavigateToPage = { page ->
-                                // Navigate to the page containing the current ayah
-                                currentPage = page
-                            },
-                            isNavigationVisible = isNavigationVisible
+                        settings = currentMemorizationSettings!!,
+                        surah = surah,
+                        quranRepository = quranRepository,
+                        onNavigateBack = { showMemorizationPlayer = false },
+                        onSaveProgress = { updatedSettings ->
+                            currentMemorizationSettings = updatedSettings
+                            quranRepository.saveMemorizationSettings(updatedSettings)
+                        },
+                        onNavigateToPage = { page ->
+                            // Navigate to the page containing the current ayah
+                            currentPage = page
+                        },
+                        isNavigationVisible = isNavigationVisible
                     )
                 }
             }
 
             // Bottom Navigation Bar
             AnimatedVisibility(
-                    visible = isNavigationVisible,
-                    modifier = Modifier.align(Alignment.BottomCenter),
-                    enter =
-                            fadeIn(animationSpec = tween(300)) +
-                                    slideInVertically(
-                                            initialOffsetY = { it },
-                                            animationSpec = tween(300)
-                                    ),
-                    exit =
-                            fadeOut(animationSpec = tween(300)) +
-                                    slideOutVertically(
-                                            targetOffsetY = { it },
-                                            animationSpec = tween(300)
-                                    )
+                visible = isNavigationVisible,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                enter =
+                    fadeIn(animationSpec = tween(300)) +
+                            slideInVertically(
+                                initialOffsetY = { it },
+                                animationSpec = tween(300)
+                            ),
+                exit =
+                    fadeOut(animationSpec = tween(300)) +
+                            slideOutVertically(
+                                targetOffsetY = { it },
+                                animationSpec = tween(300)
+                            )
             ) {
                 NavigationBar(modifier = Modifier.fillMaxWidth().height(40.dp)) {
                     // Next button (left arrow for RTL) - Advances to next page
                     NavigationBarItem(
-                            icon = {
-                                Icon(
-                                        Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "Next Page"
-                                )
-                            },
-                            selected = false,
-                            onClick = {
-                                if (currentPage < quranMetadata.totalPages) {
-                                    // Navigate based on display mode in landscape
-                                    if (isLandscape && userPreferences.useDualPageInLandscape) {
-                                        // In dual page landscape mode, navigate by 2 pages
-                                        currentPage =
-                                                minOf(quranMetadata.totalPages, currentPage + 2)
-                                    } else {
-                                        // In portrait or single page landscape mode, navigate by 1
-                                        // page
-                                        currentPage++
-                                    }
+                        icon = {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Next Page"
+                            )
+                        },
+                        selected = false,
+                        onClick = {
+                            if (currentPage < quranMetadata.totalPages) {
+                                // Navigate based on display mode in landscape
+                                if (isLandscape && userPreferences.useDualPageInLandscape) {
+                                    // In dual page landscape mode, navigate by 2 pages
+                                    currentPage =
+                                        minOf(quranMetadata.totalPages, currentPage + 2)
+                                } else {
+                                    // In portrait or single page landscape mode, navigate by 1
+                                    // page
+                                    currentPage++
                                 }
-                                extendNavigationVisibility()
-                            },
-                            enabled = currentPage < quranMetadata.totalPages
+                            }
+                            extendNavigationVisibility()
+                        },
+                        enabled = currentPage < quranMetadata.totalPages
                     )
 
                     // Memorization Button
                     NavigationBarItem(
-                            icon = {
-                                Icon(Icons.Filled.AudioFile, contentDescription = "Memorization")
-                            },
-                            selected = false,
-                            onClick = {
-                                showMemorizationScreen = true
-                                extendNavigationVisibility()
-                            }
+                        icon = {
+                            Icon(Icons.Filled.AudioFile, contentDescription = "Memorization")
+                        },
+                        selected = false,
+                        onClick = {
+                            showMemorizationScreen = true
+                            extendNavigationVisibility()
+                        }
                     )
 
                     // Index Button
                     NavigationBarItem(
-                            icon = {
-                                Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Index")
-                            },
-                            selected = false,
-                            onClick = {
-                                showIndexDialog = true
-                                extendNavigationVisibility()
-                            }
+                        icon = {
+                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Index")
+                        },
+                        selected = false,
+                        onClick = {
+                            showIndexDialog = true
+                            extendNavigationVisibility()
+                        }
                     )
 
                     // Settings Button (Gear icon)
                     NavigationBarItem(
-                            icon = { Icon(Icons.Filled.Settings, contentDescription = "Settings") },
-                            selected = false,
-                            onClick = {
-                                showSettingsScreen = true
-                                extendNavigationVisibility()
-                            }
+                        icon = { Icon(Icons.Filled.Settings, contentDescription = "Settings") },
+                        selected = false,
+                        onClick = {
+                            showSettingsScreen = true
+                            extendNavigationVisibility()
+                        }
                     )
 
                     // Previous button (right arrow for RTL) - Goes to previous page
                     NavigationBarItem(
-                            icon = {
-                                Icon(
-                                        Icons.AutoMirrored.Filled.ArrowForward,
-                                        contentDescription = "Previous Page"
-                                )
-                            },
-                            selected = false,
-                            onClick = {
-                                if (currentPage > 1) {
-                                    // Navigate based on display mode in landscape
-                                    if (isLandscape && userPreferences.useDualPageInLandscape) {
-                                        // In dual page landscape mode, navigate by 2 pages
-                                        currentPage = maxOf(1, currentPage - 2)
-                                    } else {
-                                        // In portrait or single page landscape mode, navigate by 1
-                                        // page
-                                        currentPage--
-                                    }
+                        icon = {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = "Previous Page"
+                            )
+                        },
+                        selected = false,
+                        onClick = {
+                            if (currentPage > 1) {
+                                // Navigate based on display mode in landscape
+                                if (isLandscape && userPreferences.useDualPageInLandscape) {
+                                    // In dual page landscape mode, navigate by 2 pages
+                                    currentPage = maxOf(1, currentPage - 2)
+                                } else {
+                                    // In portrait or single page landscape mode, navigate by 1
+                                    // page
+                                    currentPage--
                                 }
-                                extendNavigationVisibility()
-                            },
-                            enabled = currentPage > 1
+                            }
+                            extendNavigationVisibility()
+                        },
+                        enabled = currentPage > 1
                     )
                 }
             }
@@ -561,28 +573,28 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
             // Enhanced Index Dialog
             if (showIndexDialog) {
                 EnhancedIndexDialog(
-                        quranMetadata = quranMetadata,
-                        currentPage = currentPage,
-                        bookmarks = bookmarks,
-                        onDismiss = {
-                            showIndexDialog = false
-                            extendNavigationVisibility()
-                        },
-                        onNavigate = { page ->
-                            currentPage = page
-                            showIndexDialog = false
-                            extendNavigationVisibility()
-                        },
-                        onAddBookmark = { bookmark ->
-                            coroutineScope.launch {
-                                viewModel.addBookmark(quranRepository, bookmark)
-                            }
-                        },
-                        onRemoveBookmark = { bookmark ->
-                            coroutineScope.launch {
-                                viewModel.removeBookmark(quranRepository, bookmark)
-                            }
+                    quranMetadata = quranMetadata,
+                    currentPage = currentPage,
+                    bookmarks = bookmarks,
+                    onDismiss = {
+                        showIndexDialog = false
+                        extendNavigationVisibility()
+                    },
+                    onNavigate = { page ->
+                        currentPage = page
+                        showIndexDialog = false
+                        extendNavigationVisibility()
+                    },
+                    onAddBookmark = { bookmark ->
+                        coroutineScope.launch {
+                            viewModel.addBookmark(quranRepository, bookmark)
                         }
+                    },
+                    onRemoveBookmark = { bookmark ->
+                        coroutineScope.launch {
+                            viewModel.removeBookmark(quranRepository, bookmark)
+                        }
+                    }
                 )
             }
         }
@@ -592,15 +604,15 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun QuranPageContent(
-        currentPage: Int,
-        isLandscape: Boolean,
-        isBookmarked: Boolean,
-        showBottomPadding: Boolean,
-        onAddBookmark: () -> Unit,
-        onRemoveBookmark: (Bookmark?) -> Unit,
-        bookmarks: List<Bookmark> = emptyList(),
-        ayahInteractionHandler: AyahInteractionHandler? = null,
-        useDualPageInLandscape: Boolean = true // Default to true for backward compatibility
+    currentPage: Int,
+    isLandscape: Boolean,
+    isBookmarked: Boolean,
+    showBottomPadding: Boolean,
+    onAddBookmark: () -> Unit,
+    onRemoveBookmark: (Bookmark?) -> Unit,
+    bookmarks: List<Bookmark> = emptyList(),
+    ayahInteractionHandler: AyahInteractionHandler? = null,
+    useDualPageInLandscape: Boolean = true // Default to true for backward compatibility
 ) {
     var imageSize by remember { mutableStateOf(Size.Zero) }
     val context = LocalContext.current
@@ -608,20 +620,21 @@ fun QuranPageContent(
 
     // Log current page and bookmark status
     android.util.Log.d(
-            tag,
-            "Loading page $currentPage, isBookmarked: $isBookmarked, landscape: $isLandscape, useDualPage: $useDualPageInLandscape"
+        tag,
+        "Loading page $currentPage, isBookmarked: $isBookmarked, landscape: $isLandscape, useDualPage: $useDualPageInLandscape"
     )
     android.util.Log.d(tag, "Total bookmarks: ${bookmarks.size}")
 
+    // Add useDualPageInLandscape to the remember key to trigger recomposition when it changes
     val pageBookmarks =
-            remember(bookmarks, currentPage) {
-                bookmarks.filter { it.page == currentPage && it.ayahRef == null }
-            }
+        remember(bookmarks, currentPage) {
+            bookmarks.filter { it.page == currentPage && it.ayahRef == null }
+        }
 
     val ayahBookmarks =
-            remember(bookmarks, currentPage) {
-                bookmarks.filter { it.page == currentPage && it.ayahRef != null }
-            }
+        remember(bookmarks, currentPage) {
+            bookmarks.filter { it.page == currentPage && it.ayahRef != null }
+        }
 
     // Log filtered bookmarks
     android.util.Log.d(tag, "Page bookmarks for page $currentPage: ${pageBookmarks.size}")
@@ -631,8 +644,8 @@ fun QuranPageContent(
         android.util.Log.d(tag, "Ayah bookmark details:")
         ayahBookmarks.forEach { bookmark ->
             android.util.Log.d(
-                    tag,
-                    "  Ayah ref: ${bookmark.ayahRef}, Surah: ${bookmark.surahName}, Number: ${bookmark.ayahNumber}"
+                tag,
+                "  Ayah ref: ${bookmark.ayahRef}, Surah: ${bookmark.surahName}, Number: ${bookmark.ayahNumber}"
             )
         }
     }
@@ -641,11 +654,12 @@ fun QuranPageContent(
     val ayahRects = remember { mutableStateMapOf<String, android.graphics.Rect>() }
     var rectsLoaded by remember { mutableStateOf(false) }
 
-    // Load all ayah positions when the size changes
-    LaunchedEffect(imageSize, currentPage, ayahBookmarks.size) {
+    // Add useDualPageInLandscape to the LaunchedEffect keys to refresh rects when the preference
+    // changes
+    LaunchedEffect(imageSize, currentPage, ayahBookmarks.size, useDualPageInLandscape) {
         android.util.Log.d(
-                tag,
-                "LaunchedEffect triggered - Image size: $imageSize, Ayah bookmarks: ${ayahBookmarks.size}"
+            tag,
+            "LaunchedEffect triggered - Image size: $imageSize, Ayah bookmarks: ${ayahBookmarks.size}, useDualPage: $useDualPageInLandscape"
         )
         rectsLoaded = false
 
@@ -660,53 +674,61 @@ fun QuranPageContent(
                     android.util.Log.d(tag, "Trying to get rect for ayah $ayahRef")
 
                     val rects =
-                            ayahInteractionHandler.getAyahRects(
-                                    context,
-                                    currentPage,
-                                    ayahRef,
-                                    imageSize
-                            )
+                        ayahInteractionHandler.getAyahRects(
+                            context,
+                            currentPage,
+                            ayahRef,
+                            imageSize
+                        )
 
                     android.util.Log.d(
-                            tag,
-                            "getAyahRects returned ${rects.size} rects for $ayahRef"
+                        tag,
+                        "getAyahRects returned ${rects.size} rects for $ayahRef"
                     )
 
                     if (rects.isNotEmpty()) {
                         val rect = rects.first()
                         ayahRects[ayahRef] = rect
                         android.util.Log.d(
-                                tag,
-                                "Stored rect for $ayahRef: left=${rect.left}, top=${rect.top}, right=${rect.right}, bottom=${rect.bottom}"
+                            tag,
+                            "Stored rect for $ayahRef: left=${rect.left}, top=${rect.top}, right=${rect.right}, bottom=${rect.bottom}"
                         )
                     } else {
                         android.util.Log.e(tag, "Failed to get rectangle for ayah $ayahRef")
                     }
                 }
-                        ?: run { android.util.Log.e(tag, "Bookmark has null ayahRef: $bookmark") }
+                    ?: run { android.util.Log.e(tag, "Bookmark has null ayahRef: $bookmark") }
             }
 
             android.util.Log.d(tag, "Final ayahRects map contains ${ayahRects.size} entries")
             rectsLoaded = true
         } else {
             android.util.Log.w(
-                    tag,
-                    "Conditions not met to load ayah positions: imageSize=${imageSize}, handler=${ayahInteractionHandler != null}"
+                tag,
+                "Conditions not met to load ayah positions: imageSize=${imageSize}, handler=${ayahInteractionHandler != null}"
             )
         }
     }
 
     Box(
-            modifier =
-                    Modifier.fillMaxSize().onSizeChanged {
-                        val newSize = Size(it.width.toFloat(), it.height.toFloat())
-                        android.util.Log.d(tag, "Image size changed: $newSize")
-                        imageSize = newSize
-                    }
+        modifier =
+            Modifier.fillMaxSize().onSizeChanged {
+                val newSize = Size(it.width.toFloat(), it.height.toFloat())
+                android.util.Log.d(tag, "Image size changed: $newSize")
+                imageSize = newSize
+            }
     ) {
         // Display Quran page based on orientation and preferences
         if (isLandscape) {
-            if (useDualPageInLandscape) {
+            // Add useDualPageInLandscape as a key parameter to force re-rendering when it changes
+            val layoutMode =
+                remember(isLandscape, useDualPageInLandscape) {
+                    if (useDualPageInLandscape) "dual" else "single"
+                }
+
+            android.util.Log.d(tag, "Landscape mode selected: $layoutMode")
+
+            if (layoutMode == "dual") {
                 // Dual page landscape mode - show two pages side by side
                 val scrollState = rememberScrollState()
 
@@ -714,40 +736,39 @@ fun QuranPageContent(
                 val leftPage = if (currentPage % 2 == 0) currentPage + 1 else currentPage
 
                 android.util.Log.d(
-                        tag,
-                        "Landscape dual page mode - left page: $leftPage, right page: $rightPage"
+                    tag,
+                    "Landscape dual page mode - left page: $leftPage, right page: $rightPage"
                 )
 
-                // Scrollable container for the two pages
                 Box(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
                     Row(
-                            modifier = Modifier.fillMaxSize(),
-                            horizontalArrangement = Arrangement.Center
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.Center
                     ) {
                         Box(modifier = Modifier.weight(1f, fill = false)) {
                             if (leftPage <= 850 && leftPage >= 1) {
                                 SubcomposeAsyncImage(
-                                        model =
-                                                ImageRequest.Builder(LocalContext.current)
-                                                        .data(
-                                                                "file:///android_asset/Images/${
+                                    model =
+                                        ImageRequest.Builder(LocalContext.current)
+                                            .data(
+                                                "file:///android_asset/Images/${
                                                     leftPage.toString().padStart(3, '0')
                                                 }.webp"
-                                                        )
-                                                        .build(),
-                                        contentDescription = "Quran page $leftPage",
-                                        modifier =
-                                                Modifier.fillMaxHeight()
-                                                        .wrapContentWidth()
-                                                        .align(Alignment.Center),
-                                        contentScale = ContentScale.Fit,
-                                        error = {
-                                            Text(
-                                                    text = "Could not load image",
-                                                    color = Color.Red,
-                                                    modifier = Modifier.align(Alignment.Center)
                                             )
-                                        }
+                                            .build(),
+                                    contentDescription = "Quran page $leftPage",
+                                    modifier =
+                                        Modifier.fillMaxHeight()
+                                            .wrapContentWidth()
+                                            .align(Alignment.Center),
+                                    contentScale = ContentScale.Fit,
+                                    error = {
+                                        Text(
+                                            text = "Could not load image",
+                                            color = Color.Red,
+                                            modifier = Modifier.align(Alignment.Center)
+                                        )
+                                    }
                                 )
                             }
                         }
@@ -756,27 +777,27 @@ fun QuranPageContent(
                         Box(modifier = Modifier.weight(1f, fill = false)) {
                             if (rightPage >= 1 && rightPage <= 850) {
                                 SubcomposeAsyncImage(
-                                        model =
-                                                ImageRequest.Builder(LocalContext.current)
-                                                        .data(
-                                                                "file:///android_asset/Images/${
+                                    model =
+                                        ImageRequest.Builder(LocalContext.current)
+                                            .data(
+                                                "file:///android_asset/Images/${
                                                     rightPage.toString().padStart(3, '0')
                                                 }.webp"
-                                                        )
-                                                        .build(),
-                                        contentDescription = "Quran page $rightPage",
-                                        modifier =
-                                                Modifier.fillMaxHeight()
-                                                        .wrapContentWidth()
-                                                        .align(Alignment.Center),
-                                        contentScale = ContentScale.Fit,
-                                        error = {
-                                            Text(
-                                                    text = "Could not load image",
-                                                    color = Color.Red,
-                                                    modifier = Modifier.align(Alignment.Center)
                                             )
-                                        }
+                                            .build(),
+                                    contentDescription = "Quran page $rightPage",
+                                    modifier =
+                                        Modifier.fillMaxHeight()
+                                            .wrapContentWidth()
+                                            .align(Alignment.Center),
+                                    contentScale = ContentScale.Fit,
+                                    error = {
+                                        Text(
+                                            text = "Could not load image",
+                                            color = Color.Red,
+                                            modifier = Modifier.align(Alignment.Center)
+                                        )
+                                    }
                                 )
                             }
                         }
@@ -789,32 +810,32 @@ fun QuranPageContent(
 
                 Box(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
                     Box(
-                            modifier =
-                                    Modifier.fillMaxWidth()
-                                            .aspectRatio(0.7f)
-                                            .align(
-                                                    Alignment.Center
-                                            ) // Approximate aspect ratio for Quran pages
+                        modifier =
+                            Modifier.fillMaxWidth()
+                                .aspectRatio(0.7f)
+                                .align(
+                                    Alignment.Center
+                                ) // Approximate aspect ratio for Quran pages
                     ) {
                         SubcomposeAsyncImage(
-                                model =
-                                        ImageRequest.Builder(LocalContext.current)
-                                                .data(
-                                                        "file:///android_asset/Images/${
-                                        currentPage.toString().padStart(3, '0')
-                                    }.webp"
-                                                )
-                                                .build(),
-                                contentDescription = "Quran page $currentPage",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Fit,
-                                error = {
-                                    Text(
-                                            text = "Could not load image",
-                                            color = Color.Red,
-                                            modifier = Modifier.align(Alignment.Center)
+                            model =
+                                ImageRequest.Builder(LocalContext.current)
+                                    .data(
+                                        "file:///android_asset/Images/${
+                                            currentPage.toString().padStart(3, '0')
+                                        }.webp"
                                     )
-                                }
+                                    .build(),
+                            contentDescription = "Quran page $currentPage",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit,
+                            error = {
+                                Text(
+                                    text = "Could not load image",
+                                    color = Color.Red,
+                                    modifier = Modifier.align(Alignment.Center)
+                                )
+                            }
                         )
                     }
                 }
@@ -824,24 +845,24 @@ fun QuranPageContent(
             android.util.Log.d(tag, "Portrait mode - single page: $currentPage")
             Box(modifier = Modifier.fillMaxSize()) {
                 SubcomposeAsyncImage(
-                        model =
-                                ImageRequest.Builder(LocalContext.current)
-                                        .data(
-                                                "file:///android_asset/Images/${
+                    model =
+                        ImageRequest.Builder(LocalContext.current)
+                            .data(
+                                "file:///android_asset/Images/${
                                     currentPage.toString().padStart(3, '0')
                                 }.webp"
-                                        )
-                                        .build(),
-                        contentDescription = "Quran page $currentPage",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.FillBounds,
-                        error = {
-                            Text(
-                                    text = "Could not load image",
-                                    color = Color.Red,
-                                    modifier = Modifier.align(Alignment.Center)
                             )
-                        }
+                            .build(),
+                    contentDescription = "Quran page $currentPage",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.FillBounds,
+                    error = {
+                        Text(
+                            text = "Could not load image",
+                            color = Color.Red,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
                 )
             }
         }
@@ -851,18 +872,18 @@ fun QuranPageContent(
             if (isBookmarked && pageBookmarks.isNotEmpty()) {
                 android.util.Log.d(tag, "Showing page bookmark icon")
                 IconButton(
-                        onClick = { onRemoveBookmark(pageBookmarks.first()) },
-                        modifier =
-                                Modifier.align(Alignment.TopEnd)
-                                        .offset(x = (-5).dp, y = 0.dp)
-                                        .size(36.dp)
-                                        .zIndex(100f)
+                    onClick = { onRemoveBookmark(pageBookmarks.first()) },
+                    modifier =
+                        Modifier.align(Alignment.TopEnd)
+                            .offset(x = (-5).dp, y = 0.dp)
+                            .size(36.dp)
+                            .zIndex(100f)
                 ) {
                     Icon(
-                            imageVector = Icons.Filled.Bookmark,
-                            contentDescription = "Page Bookmarked",
-                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                            modifier = Modifier.size(36.dp)
+                        imageVector = Icons.Filled.Bookmark,
+                        contentDescription = "Page Bookmarked",
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                        modifier = Modifier.size(36.dp)
                     )
                 }
             }
@@ -871,22 +892,22 @@ fun QuranPageContent(
 
     if (ayahBookmarks.isNotEmpty() && !isLandscape && rectsLoaded) {
         android.util.Log.d(
-                tag,
-                "Rendering ayah bookmarks overlay with ${ayahBookmarks.size} bookmarks"
+            tag,
+            "Rendering ayah bookmarks overlay with ${ayahBookmarks.size} bookmarks"
         )
 
         // Wrap all ayah bookmarks in a BoxWithConstraints to get the size
         BoxWithConstraints(
-                modifier =
-                        Modifier.fillMaxSize()
-                                .zIndex(9999f) // Ensure this overlay is on top of everything
+            modifier =
+                Modifier.fillMaxSize()
+                    .zIndex(9999f) // Ensure this overlay is on top of everything
         ) {
             val parentMaxWidth = this.maxWidth
             val parentMaxHeight = this.maxHeight
 
             android.util.Log.d(
-                    tag,
-                    "Ayah bookmarks parent container size: $parentMaxWidth x $parentMaxHeight"
+                tag,
+                "Ayah bookmarks parent container size: $parentMaxWidth x $parentMaxHeight"
             )
 
             // Calculate scaling factors between the image size and container size
@@ -894,8 +915,8 @@ fun QuranPageContent(
             val scaleY = parentMaxHeight.value / imageSize.height
 
             android.util.Log.d(
-                    tag,
-                    "Scaling factors: scaleX=$scaleX, scaleY=$scaleY (image size: ${imageSize.width}x${imageSize.height})"
+                tag,
+                "Scaling factors: scaleX=$scaleX, scaleY=$scaleY (image size: ${imageSize.width}x${imageSize.height})"
             )
 
             // Place each ayah bookmark in a separate Box
@@ -909,13 +930,12 @@ fun QuranPageContent(
 
                         // DEBUGGING: Log more details about the rectangle position
                         android.util.Log.d(
-                                tag,
-                                "Rect details: left=${rect.left}, top=${rect.top}, right=${rect.right}, bottom=${rect.bottom}, width=${rect.width()}, height=${rect.height()}, centerX=${rect.centerX()}"
+                            tag,
+                            "Rect details: left=${rect.left}, top=${rect.top}, right=${rect.right}, bottom=${rect.bottom}, width=${rect.width()}, height=${rect.height()}, centerX=${rect.centerX()}"
                         )
 
                         // For Arabic text, we want to position at the right side of the text (which
-                        // is the
-                        // beginning of the line for RTL text) or use the center for better
+                        // is the beginning of the line for RTL text) or use the center for better
                         // visibility
                         val rightX = rect.right
                         val centerX = rect.centerX()
@@ -929,50 +949,50 @@ fun QuranPageContent(
                         val finalX = scaledRight - 20 // Offset a bit from the edge
 
                         android.util.Log.d(
-                                tag,
-                                "Scaled coordinates: right=${scaledRight}dp, center=${scaledCenter}dp, top=${scaledTop}dp, finalX=${finalX}dp"
+                            tag,
+                            "Scaled coordinates: right=${scaledRight}dp, center=${scaledCenter}dp, top=${scaledTop}dp, finalX=${finalX}dp"
                         )
 
                         // Use absolute offset with the scaled coordinates
                         Box(
-                                modifier =
-                                        Modifier.absoluteOffset(x = (finalX.dp), y = scaledTop.dp)
-                                                .size(55.dp)
-                                                .zIndex(9999f)
+                            modifier =
+                                Modifier.absoluteOffset(x = (finalX.dp), y = scaledTop.dp)
+                                    .size(55.dp)
+                                    .zIndex(9999f)
                         ) {
                             // Bookmark icon with green tint
                             IconButton(
-                                    onClick = {
-                                        android.util.Log.d(tag, "Ayah bookmark clicked: $ayahRef")
-                                        onRemoveBookmark(bookmark)
-                                    },
-                                    modifier = Modifier.size(150.dp).align(Alignment.Center)
+                                onClick = {
+                                    android.util.Log.d(tag, "Ayah bookmark clicked: $ayahRef")
+                                    onRemoveBookmark(bookmark)
+                                },
+                                modifier = Modifier.size(150.dp).align(Alignment.Center)
                             ) {
                                 Icon(
-                                        imageVector = Icons.Filled.Bookmark,
-                                        contentDescription = "Ayah Bookmarked",
-                                        tint = Color(0x99007A55),
-                                        modifier = Modifier.size(150.dp)
+                                    imageVector = Icons.Filled.Bookmark,
+                                    contentDescription = "Ayah Bookmarked",
+                                    tint = Color(0x99007A55),
+                                    modifier = Modifier.size(150.dp)
                                 )
                             }
                         }
 
                         android.util.Log.d(
-                                tag,
-                                "Rendered ayah bookmark for $ayahRef at scaled position (${finalX}dp, ${scaledTop}dp)"
+                            tag,
+                            "Rendered ayah bookmark for $ayahRef at scaled position (${finalX}dp, ${scaledTop}dp)"
                         )
                     } else {
                         android.util.Log.e(tag, "No rectangle found for ayah $ayahRef")
                     }
                 }
-                        ?: run { android.util.Log.e(tag, "Null ayahRef in bookmark: $bookmark") }
+                    ?: run { android.util.Log.e(tag, "Null ayahRef in bookmark: $bookmark") }
             }
         }
     } else if (ayahBookmarks.isNotEmpty()) {
         if (!rectsLoaded) {
             android.util.Log.d(
-                    tag,
-                    "Not showing ayah bookmarks yet because rectangles haven't loaded"
+                tag,
+                "Not showing ayah bookmarks yet because rectangles haven't loaded"
             )
         } else if (isLandscape) {
             android.util.Log.d(tag, "Not showing ayah bookmarks in landscape mode")

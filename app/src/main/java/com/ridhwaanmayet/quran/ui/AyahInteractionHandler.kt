@@ -1,6 +1,8 @@
 package com.ridhwaanmayet.quran.ui
 
 import android.content.Context
+import android.os.Parcel
+import android.os.Parcelable
 import android.util.Log
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -34,10 +36,10 @@ import kotlinx.coroutines.withContext
  * Uses the enhanced CoordinateMapper for percentage-based coordinate mapping.
  */
 class AyahInteractionHandler(
-    private val context: Context,
-    private val quranRepository: QuranRepository,
-    private val coordinateMapper: CoordinateMapper = CoordinateMapper()
-) {
+        private val context: Context,
+        private val quranRepository: QuranRepository,
+        private val coordinateMapper: CoordinateMapper = CoordinateMapper()
+) : Parcelable {
     // Scope for long press detection
     private val longPressScope = MainScope()
 
@@ -57,18 +59,40 @@ class AyahInteractionHandler(
     // Thread-safe state holder
     private val currentState = AtomicReference(GestureState.IDLE)
 
+    constructor(parcel: Parcel) : this(
+        TODO("context"),
+        TODO("quranRepository"),
+        TODO("coordinateMapper")
+    ) {
+    }
+
     // Add TAG for logging
-    companion object {
+    companion object CREATOR : Parcelable.Creator<AyahInteractionHandler> {
         private const val TAG = "AyahInteractionHandler"
 
         // Minimum distance for a swipe to be registered
         const val MIN_SWIPE_DISTANCE = 50f
+
         // Maximum distance for a tap to be registered
         const val TAP_THRESHOLD = 20f
+
         // Minimum duration for a long press in milliseconds
         const val LONG_PRESS_DURATION = 500L
+
         // Maximum vertical movement allowed for horizontal swipe
         const val MAX_VERTICAL_RATIO = 0.5f
+
+        // Threshold for fling velocity in pixels per millisecond
+        const val FLING_VELOCITY_THRESHOLD = 0.5f
+
+        // Parcelable.Creator implementation
+        override fun createFromParcel(parcel: Parcel): AyahInteractionHandler {
+            return AyahInteractionHandler(parcel)
+        }
+
+        override fun newArray(size: Int): Array<AyahInteractionHandler?> {
+            return arrayOfNulls(size)
+        }
     }
 
     /** Initialize ayah position data by extracting from HTML files */
@@ -303,11 +327,12 @@ class AyahInteractionHandler(
                 val rects = getAyahRects(context, currentPage, ayahRef, displaySize, imageSize)
                 if (rects.isNotEmpty()) {
                     // Store with some padding to create a "safe zone" around the bookmark
-                    val paddedRects = rects.map { rect ->
-                        val paddedRect = android.graphics.Rect(rect)
-                        paddedRect.inset(-40, -40) // Add 40px padding all around
-                        paddedRect
-                    }
+                    val paddedRects =
+                        rects.map { rect ->
+                            val paddedRect = android.graphics.Rect(rect)
+                            paddedRect.inset(-40, -40) // Add 40px padding all around
+                            paddedRect
+                        }
                     bookmarkSafeZones[ayahRef] = paddedRects
                 }
             }
@@ -329,6 +354,16 @@ class AyahInteractionHandler(
     }
 
     /** Creates a Modifier that handles all touch interactions for the Quran page */
+    override fun writeToParcel(parcel: Parcel, flags: Int) {
+
+    }
+
+    override fun describeContents(): Int {
+        return 0
+    }
+
+
+    /** Creates a Modifier that handles all touch interactions for the Quran page */
     fun handleAyahInteractions(
         modifier: Modifier = Modifier,
         currentPage: Int,
@@ -340,269 +375,310 @@ class AyahInteractionHandler(
         actualImageSize: Size? = null,
         pageOffset: Offset = Offset.Zero,
         pageBookmarks: List<Bookmark> = emptyList()
-    ): Modifier =
-        modifier.pointerInput(currentPage, displaySize, actualImageSize, pageOffset, pageBookmarks) {
-            Log.d(
-                TAG,
-                "Setting up pointer input handler for page $currentPage, display size: $displaySize"
-            )
+    ): Modifier {
+        // Combine the pointer input for swipes, taps, and long presses with the detection for flings
+        return modifier
+            .pointerInput(
+                currentPage,
+                displaySize,
+                actualImageSize,
+                pageOffset,
+                pageBookmarks
+            ) {
+                Log.d(
+                    TAG,
+                    "Setting up pointer input handler for page $currentPage, display size: $displaySize"
+                )
 
-            if (actualImageSize != null) {
-                Log.d(TAG, "Actual rendered image size: $actualImageSize")
-            }
+                if (actualImageSize != null) {
+                    Log.d(TAG, "Actual rendered image size: $actualImageSize")
+                }
 
-            Log.d(TAG, "Page offset: $pageOffset")
+                Log.d(TAG, "Page offset: $pageOffset")
 
-            // Update bookmark safe zones - cache the hit areas for bookmarks
-            updateBookmarkSafeZones(currentPage, pageBookmarks, displaySize, actualImageSize ?: displaySize)
+                // Update bookmark safe zones - cache the hit areas for bookmarks
+                updateBookmarkSafeZones(
+                    currentPage,
+                    pageBookmarks,
+                    displaySize,
+                    actualImageSize ?: displaySize
+                )
 
-            awaitEachGesture {
-                // Reset state machine for each new gesture
-                currentState.set(GestureState.IDLE)
-                Log.d(TAG, "Starting new gesture cycle, state=${currentState.get()}")
+                awaitEachGesture {
+                    // Reset state machine for each new gesture
+                    currentState.set(GestureState.IDLE)
+                    Log.d(TAG, "Starting new gesture cycle, state=${currentState.get()}")
 
-                try {
-                    // Handle initial touch down
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    Log.d(TAG, "Pointer down at ${down.position}")
+                    try {
+                        // Handle initial touch down
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        Log.d(TAG, "Pointer down at ${down.position}")
 
-                    // Check if we're tapping near a bookmark indicator
-                    val touchingBookmark = isTouchingBookmark(down.position)
-                    if (touchingBookmark) {
-                        Log.d(TAG, "Touch is in bookmark area, skipping long press detection")
-                        // We let the pointer event continue but won't start long press detection
-                        currentState.set(GestureState.POTENTIAL_TAP)
-                        // Wait for pointer up
-                        while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Main)
-                            val change = event.changes.firstOrNull()
-                            if (change == null || change.changedToUp()) break
+                        // Check if we're tapping near a bookmark indicator
+                        val touchingBookmark = isTouchingBookmark(down.position)
+                        if (touchingBookmark) {
+                            Log.d(TAG, "Touch is in bookmark area, skipping long press detection")
+                            // We let the pointer event continue but won't start long press detection
+                            currentState.set(GestureState.POTENTIAL_TAP)
+                            // Wait for pointer up
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Main)
+                                val change = event.changes.firstOrNull()
+                                if (change == null || change.changedToUp()) break
+                            }
+                            // Trigger tap anyway to ensure navigation controls work
+                            onTap()
+                            return@awaitEachGesture
                         }
-                        // Trigger tap anyway to ensure navigation controls work
-                        onTap()
-                        return@awaitEachGesture
-                    }
 
-                    // Move to TOUCH_DOWN state
-                    currentState.set(GestureState.TOUCH_DOWN)
+                        // Move to TOUCH_DOWN state
+                        currentState.set(GestureState.TOUCH_DOWN)
 
-                    // Initial position
-                    val startPos = down.position
-                    var currentPos = startPos
-                    var finalPos = startPos
+                        // Initial position
+                        val startPos = down.position
+                        var currentPos = startPos
+                        var finalPos = startPos
 
-                    // Create a separate job for long press detection
-                    val longPressJob =
-                        longPressScope.launch {
-                            try {
-                                Log.d(TAG, "Starting long press detection")
-                                delay(LONG_PRESS_DURATION)
+                        // Track velocity for fling detection
+                        var lastUpdateTime = System.currentTimeMillis()
+                        var velocityX = 0f
 
-                                // Only proceed if we're still in a valid state for long
-                                // press
-                                val state = currentState.get()
-                                if (state == GestureState.TOUCH_DOWN ||
-                                    state == GestureState.POTENTIAL_TAP
-                                ) {
-                                    Log.d(
-                                        TAG,
-                                        "Long press timeout reached, current state=$state"
-                                    )
+                        // Create a separate job for long press detection
+                        val longPressJob =
+                            longPressScope.launch {
+                                try {
+                                    Log.d(TAG, "Starting long press detection")
+                                    delay(LONG_PRESS_DURATION)
 
-                                    // Try to atomically transition to LONG_PRESS_DETECTED
-                                    if (currentState.compareAndSet(
-                                            state,
-                                            GestureState.LONG_PRESS_DETECTED
-                                        )
+                                    // Only proceed if we're still in a valid state for long press
+                                    val state = currentState.get()
+                                    if (state == GestureState.TOUCH_DOWN ||
+                                        state == GestureState.POTENTIAL_TAP
                                     ) {
                                         Log.d(
                                             TAG,
-                                            "Long press detected at $startPos, transitioning to LONG_PRESS_DETECTED"
+                                            "Long press timeout reached, current state=$state"
                                         )
 
-                                        // Find which ayah was pressed
-                                        val ayahRef =
-                                            findAyahAtPosition(
-                                                currentPage,
-                                                startPos.x,
-                                                startPos.y,
-                                                displaySize,
-                                                actualImageSize,
-                                                pageOffset
+                                        // Try to atomically transition to LONG_PRESS_DETECTED
+                                        if (currentState.compareAndSet(
+                                                state,
+                                                GestureState.LONG_PRESS_DETECTED
+                                            )
+                                        ) {
+                                            Log.d(
+                                                TAG,
+                                                "Long press detected at $startPos, transitioning to LONG_PRESS_DETECTED"
                                             )
 
-                                        // Trigger long press callback and save ayah
-                                        // position
-                                        if (ayahRef != null) {
-                                            Log.d(TAG, "Long press on ayah: $ayahRef")
-                                            // Save the ayah position to the repository
-                                            saveAyahPosition(ayahRef, currentPage)
-                                            // Trigger callback
-                                            onAyahLongPress(ayahRef)
+                                            // Find which ayah was pressed
+                                            val ayahRef =
+                                                findAyahAtPosition(
+                                                    currentPage,
+                                                    startPos.x,
+                                                    startPos.y,
+                                                    displaySize,
+                                                    actualImageSize,
+                                                    pageOffset
+                                                )
+
+                                            // Trigger long press callback and save ayah position
+                                            if (ayahRef != null) {
+                                                Log.d(TAG, "Long press on ayah: $ayahRef")
+                                                // Save the ayah position to the repository
+                                                saveAyahPosition(ayahRef, currentPage)
+                                                // Trigger callback
+                                                onAyahLongPress(ayahRef)
+                                            } else {
+                                                Log.d(
+                                                    TAG,
+                                                    "Long press did not find an ayah at position"
+                                                )
+                                            }
                                         } else {
                                             Log.d(
                                                 TAG,
-                                                "Long press did not find an ayah at position"
+                                                "State changed during long press detection, aborting long press"
                                             )
                                         }
                                     } else {
                                         Log.d(
                                             TAG,
-                                            "State changed during long press detection, aborting long press"
+                                            "State changed to $state, aborting long press"
                                         )
                                     }
-                                } else {
-                                    Log.d(
-                                        TAG,
-                                        "State changed to $state, aborting long press"
-                                    )
-                                }
-                            } catch (e: CancellationException) {
-                                Log.d(TAG, "Long press detection cancelled")
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Error in long press detection: ${e.message}")
-                            }
-                        }
-
-                    // Move to the POTENTIAL_TAP state after starting long press job
-                    if (currentState.compareAndSet(
-                            GestureState.TOUCH_DOWN,
-                            GestureState.POTENTIAL_TAP
-                        )
-                    ) {
-                        Log.d(TAG, "Transitioning to POTENTIAL_TAP state")
-                    }
-
-                    // Track movement until pointer is up
-                    var change: PointerInputChange? = null
-                    try {
-                        while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Main)
-                            change = event.changes.firstOrNull()
-
-                            // No pointer found, break the loop
-                            if (change == null) {
-                                Log.d(TAG, "No pointer found, breaking tracking loop")
-                                break
-                            }
-
-                            currentPos = change.position
-
-                            // Check if we've moved beyond the tap threshold
-                            val distance = (currentPos - startPos).getDistance()
-                            val currentGestureState = currentState.get()
-
-                            if (distance > TAP_THRESHOLD &&
-                                (currentGestureState ==
-                                        GestureState.POTENTIAL_TAP ||
-                                        currentGestureState ==
-                                        GestureState.TOUCH_DOWN)
-                            ) {
-                                Log.d(TAG, "Movement detected beyond threshold: $distance")
-
-                                // Try to transition to DRAGGING state
-                                if (currentState.compareAndSet(
-                                        currentGestureState,
-                                        GestureState.DRAGGING
-                                    )
-                                ) {
-                                    Log.d(TAG, "Transitioning to DRAGGING state")
-                                    // Cancel long press detection as we're now dragging
-                                    longPressJob.cancel()
-                                } else {
-                                    Log.d(
-                                        TAG,
-                                        "Failed to transition to DRAGGING, current state=${currentState.get()}"
-                                    )
+                                } catch (e: CancellationException) {
+                                    Log.d(TAG, "Long press detection cancelled")
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Error in long press detection: ${e.message}")
                                 }
                             }
 
-                            // If pointer is up, end tracking
-                            if (change.changedToUp()) {
-                                Log.d(TAG, "Pointer up at $currentPos")
-                                finalPos = currentPos
-                                break
-                            }
-                        }
-                    } finally {
-                        // Always ensure we cancel the long press job when tracking ends
-                        longPressJob.cancel()
-                    }
-
-                    // Process the gesture based on final state
-                    when (currentState.get()) {
-                        GestureState.POTENTIAL_TAP -> {
-                            // This was a simple tap (no drag detected, no long press)
-                            Log.d(TAG, "Gesture ended in POTENTIAL_TAP state, triggering tap")
-                            currentState.set(GestureState.COMPLETED)
-                            onTap()
-                        }
-                        GestureState.DRAGGING -> {
-                            // Calculate the drag distance and direction
-                            val deltaX = finalPos.x - startPos.x
-                            val deltaY = abs(finalPos.y - startPos.y)
-                            Log.d(
-                                TAG,
-                                "Gesture ended in DRAGGING state: deltaX=$deltaX, deltaY=$deltaY"
+                        // Move to the POTENTIAL_TAP state after starting long press job
+                        if (currentState.compareAndSet(
+                                GestureState.TOUCH_DOWN,
+                                GestureState.POTENTIAL_TAP
                             )
+                        ) {
+                            Log.d(TAG, "Transitioning to POTENTIAL_TAP state")
+                        }
 
-                            // Determine if it's a valid horizontal swipe
-                            val isHorizontalSwipe =
-                                abs(deltaX) > MIN_SWIPE_DISTANCE &&
+                        // Track movement until pointer is up
+                        var change: PointerInputChange? = null
+                        try {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Main)
+                                change = event.changes.firstOrNull()
+
+                                // No pointer found, break the loop
+                                if (change == null) {
+                                    Log.d(TAG, "No pointer found, breaking tracking loop")
+                                    break
+                                }
+
+                                val prevPos = currentPos
+                                currentPos = change.position
+
+                                // Calculate velocity
+                                val now = System.currentTimeMillis()
+                                val timeDelta = now - lastUpdateTime
+                                if (timeDelta > 0) {
+                                    val positionDelta = currentPos.x - prevPos.x
+                                    val instantVelocity = positionDelta / timeDelta
+                                    // Apply some smoothing
+                                    velocityX = 0.7f * velocityX + 0.3f * instantVelocity
+                                    lastUpdateTime = now
+                                }
+
+                                // Check if we've moved beyond the tap threshold
+                                val distance = (currentPos - startPos).getDistance()
+                                val currentGestureState = currentState.get()
+
+                                if (distance > TAP_THRESHOLD &&
+                                    (currentGestureState ==
+                                            GestureState.POTENTIAL_TAP ||
+                                            currentGestureState ==
+                                            GestureState.TOUCH_DOWN)
+                                ) {
+                                    Log.d(TAG, "Movement detected beyond threshold: $distance")
+
+                                    // Try to transition to DRAGGING state
+                                    if (currentState.compareAndSet(
+                                            currentGestureState,
+                                            GestureState.DRAGGING
+                                        )
+                                    ) {
+                                        Log.d(TAG, "Transitioning to DRAGGING state")
+                                        // Cancel long press detection as we're now dragging
+                                        longPressJob.cancel()
+                                    } else {
+                                        Log.d(
+                                            TAG,
+                                            "Failed to transition to DRAGGING, current state=${currentState.get()}"
+                                        )
+                                    }
+                                }
+
+                                // If pointer is up, end tracking
+                                if (change.changedToUp()) {
+                                    Log.d(TAG, "Pointer up at $currentPos")
+                                    finalPos = currentPos
+                                    break
+                                }
+                            }
+                        } finally {
+                            // Always ensure we cancel the long press job when tracking ends
+                            longPressJob.cancel()
+                        }
+
+                        // Process the gesture based on final state
+                        when (currentState.get()) {
+                            GestureState.POTENTIAL_TAP -> {
+                                // This was a simple tap (no drag detected, no long press)
+                                Log.d(TAG, "Gesture ended in POTENTIAL_TAP state, triggering tap")
+                                currentState.set(GestureState.COMPLETED)
+                                onTap()
+                            }
+
+                            GestureState.DRAGGING -> {
+                                // Calculate the drag distance and direction
+                                val deltaX = finalPos.x - startPos.x
+                                val deltaY = abs(finalPos.y - startPos.y)
+                                Log.d(
+                                    TAG,
+                                    "Gesture ended in DRAGGING state: deltaX=$deltaX, deltaY=$deltaY, velocityX=$velocityX"
+                                )
+
+                                // Determine if it's a valid horizontal swipe or fling
+                                val isHorizontalSwipe =
+                                    abs(deltaX) > MIN_SWIPE_DISTANCE &&
+                                            deltaY < abs(deltaX) * MAX_VERTICAL_RATIO
+
+                                // Consider a high velocity drag as a fling (even if distance is shorter)
+                                val isHorizontalFling = abs(velocityX) > FLING_VELOCITY_THRESHOLD &&
                                         deltaY < abs(deltaX) * MAX_VERTICAL_RATIO
 
-                            currentState.set(GestureState.COMPLETED)
+                                currentState.set(GestureState.COMPLETED)
 
-                            if (isHorizontalSwipe) {
-                                if (deltaX > 0) {
-                                    // Swipe right (RTL: next page)
-                                    Log.d(TAG, "Swipe right detected")
-                                    onSwipeRight()
+                                if (isHorizontalSwipe || isHorizontalFling) {
+                                    if (deltaX > 0) {
+                                        // Swipe right (RTL: next page)
+                                        Log.d(
+                                            TAG,
+                                            "Swipe/fling right detected (velocityX=$velocityX)"
+                                        )
+                                        onSwipeRight()
+                                    } else {
+                                        // Swipe left (RTL: previous page)
+                                        Log.d(
+                                            TAG,
+                                            "Swipe/fling left detected (velocityX=$velocityX)"
+                                        )
+                                        onSwipeLeft()
+                                    }
                                 } else {
-                                    // Swipe left (RTL: previous page)
-                                    Log.d(TAG, "Swipe left detected")
-                                    onSwipeLeft()
-                                }
-                            } else {
-                                // If not a clear directional swipe, it might be a tap
-                                val totalDistance = (finalPos - startPos).getDistance()
-                                if (totalDistance < TAP_THRESHOLD) {
-                                    Log.d(TAG, "Small movement treated as tap")
-                                    onTap()
-                                } else {
-                                    Log.d(TAG, "Indeterminate gesture, not processing")
+                                    // If not a clear directional swipe, it might be a tap
+                                    val totalDistance = (finalPos - startPos).getDistance()
+                                    if (totalDistance < TAP_THRESHOLD) {
+                                        Log.d(TAG, "Small movement treated as tap")
+                                        onTap()
+                                    } else {
+                                        Log.d(TAG, "Indeterminate gesture, not processing")
+                                    }
                                 }
                             }
+
+                            GestureState.LONG_PRESS_DETECTED -> {
+                                // Long press was already handled in the long press job
+                                Log.d(
+                                    TAG,
+                                    "Gesture ended in LONG_PRESS_DETECTED state, already handled"
+                                )
+                                currentState.set(GestureState.COMPLETED)
+                            }
+
+                            else -> {
+                                // Unexpected end state, log it
+                                Log.d(
+                                    TAG,
+                                    "Gesture ended in unexpected state: ${currentState.get()}"
+                                )
+                                currentState.set(GestureState.COMPLETED)
+                            }
                         }
-                        GestureState.LONG_PRESS_DETECTED -> {
-                            // Long press was already handled in the long press job
-                            Log.d(
-                                TAG,
-                                "Gesture ended in LONG_PRESS_DETECTED state, already handled"
-                            )
-                            currentState.set(GestureState.COMPLETED)
-                        }
-                        else -> {
-                            // Unexpected end state, log it
-                            Log.d(
-                                TAG,
-                                "Gesture ended in unexpected state: ${currentState.get()}"
-                            )
-                            currentState.set(GestureState.COMPLETED)
-                        }
+                    } catch (e: CancellationException) {
+                        // Gesture tracking was cancelled, clean up
+                        Log.d(TAG, "Gesture tracking cancelled")
+                        currentState.set(GestureState.COMPLETED)
+                    } catch (e: Exception) {
+                        // Add general exception handling
+                        Log.e(TAG, "Error in gesture handling: ${e.message}")
+                        currentState.set(GestureState.COMPLETED)
+                    } finally {
+                        // Always clean up and reset state
+                        Log.d(TAG, "Gesture cycle complete, final state=${currentState.get()}")
                     }
-                } catch (e: CancellationException) {
-                    // Gesture tracking was cancelled, clean up
-                    Log.d(TAG, "Gesture tracking cancelled")
-                    currentState.set(GestureState.COMPLETED)
-                } catch (e: Exception) {
-                    // Add general exception handling
-                    Log.e(TAG, "Error in gesture handling: ${e.message}")
-                    currentState.set(GestureState.COMPLETED)
-                } finally {
-                    // Always clean up and reset state
-                    Log.d(TAG, "Gesture cycle complete, final state=${currentState.get()}")
                 }
             }
-        }
+    }
 }

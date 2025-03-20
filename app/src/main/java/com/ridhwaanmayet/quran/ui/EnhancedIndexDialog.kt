@@ -404,17 +404,22 @@ fun BookmarksTab(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Show the appropriate bookmarks based on tab selection
                 when (selectedTabIndex) {
                     0 ->
                             BookmarksList(
-                                    bookmarks = pageBookmarks.sortedByDescending { it.createdAt },
+                                    bookmarks =
+                                            pageBookmarks.sortedWith(
+                                                    compareBy({ it.page }, { it.ayahNumber ?: 0 })
+                                            ),
                                     onBookmarkSelected = onBookmarkSelected,
                                     onRemoveBookmark = onRemoveBookmark
                             )
                     1 ->
                             BookmarksList(
-                                    bookmarks = ayahBookmarks.sortedByDescending { it.createdAt },
+                                    bookmarks =
+                                            ayahBookmarks.sortedWith(
+                                                    compareBy({ it.page }, { it.ayahNumber ?: 0 })
+                                            ),
                                     onBookmarkSelected = onBookmarkSelected,
                                     onRemoveBookmark = onRemoveBookmark
                             )
@@ -422,7 +427,10 @@ fun BookmarksTab(
             } else {
                 // If we only have one type of bookmarks, show all without tabs
                 BookmarksList(
-                        bookmarks = bookmarks.sortedByDescending { it.createdAt },
+                        bookmarks =
+                                bookmarks.sortedWith(
+                                        compareBy({ it.page }, { it.ayahNumber ?: 0 })
+                                ),
                         onBookmarkSelected = onBookmarkSelected,
                         onRemoveBookmark = onRemoveBookmark
                 )
