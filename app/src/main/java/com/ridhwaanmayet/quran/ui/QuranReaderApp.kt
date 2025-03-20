@@ -61,11 +61,9 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
     var currentPage by remember { mutableStateOf(currentPageFromViewModel) }
     var showIndexDialog by remember { mutableStateOf(false) }
     var showSettingsScreen by remember { mutableStateOf(false) }
-    var showAyahDialog by remember { mutableStateOf(false) }
-    var selectedAyahRef by remember { mutableStateOf("") }
     val bookmarks by viewModel.bookmarks.collectAsState()
     val userPreferences by viewModel.userPreferences.collectAsState()
-
+    var recentlyRemovedAyahRefs = remember { mutableStateListOf<String>() }
     var showMemorizationScreen by remember { mutableStateOf(false) }
     var showMemorizationPlayer by remember { mutableStateOf(false) }
     var currentMemorizationSettings by remember {
@@ -159,7 +157,6 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
         resetScreenTimeout()
     }
 
-    // Function to handle ayah long press
     fun handleAyahLongPress(ayahRef: String) {
         val parts = ayahRef.split(":")
         if (parts.size != 2) {
@@ -168,6 +165,17 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
 
         val surahNumber = parts[0].toIntOrNull() ?: return
         val ayahNumber = parts[1].toIntOrNull() ?: return
+
+        // Check if this ayah is already bookmarked - prevent duplicate creation
+        val existingBookmark = bookmarks.find { it.ayahRef == ayahRef }
+        if (existingBookmark != null) {
+            // This ayah is already bookmarked, don't create a duplicate
+            android.util.Log.d(
+                    "QuranReaderApp",
+                    "Ayah $ayahRef is already bookmarked, skipping bookmark creation"
+            )
+            return
+        }
 
         // Find the current juz
         val currentJuz =
@@ -288,23 +296,16 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
                                                         onTap = { showNavigationTemporarily() },
                                                         onSwipeLeft = {
                                                             if (currentPage > 1) {
-                                                                // Navigate based on display mode in
-                                                                // landscape
                                                                 if (isLandscape &&
                                                                                 userPreferences
                                                                                         .useDualPageInLandscape
                                                                 ) {
-                                                                    // In dual page landscape mode,
-                                                                    // navigate by 2 pages
                                                                     currentPage =
                                                                             maxOf(
                                                                                     1,
                                                                                     currentPage - 2
                                                                             )
                                                                 } else {
-                                                                    // In portrait or single page
-                                                                    // landscape mode, navigate by 1
-                                                                    // page
                                                                     currentPage--
                                                                 }
                                                             }
@@ -339,7 +340,11 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
                                                         },
                                                         onAyahLongPress = { ayahRef ->
                                                             handleAyahLongPress(ayahRef)
-                                                        }
+                                                        },
+                                                        pageBookmarks =
+                                                                bookmarks.filter {
+                                                                    it.page == currentPage
+                                                                }
                                                 )
                                         )
                 ) {
@@ -354,11 +359,6 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
                                         imageSize = pageImageSize // Update the outer imageSize
                                     }
                     ) {
-                        // This is a snippet showing just the change needed in the QuranReaderApp
-                        // function
-                        // where it calls QuranPageContent
-
-                        // Find this section in the original code where QuranPageContent is called
                         QuranPageContent(
                                 currentPage = currentPage,
                                 isLandscape = isLandscape,
@@ -368,6 +368,18 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
                                 onRemoveBookmark = { bookmark ->
                                     coroutineScope.launch {
                                         if (bookmark != null) {
+                                            // For ayah bookmarks, add to recently removed list
+                                            bookmark.ayahRef?.let { ayahRef ->
+                                                recentlyRemovedAyahRefs.add(ayahRef)
+
+                                                // Schedule removal from the protection list after a
+                                                // delay
+                                                launch {
+                                                    delay(1000) // 1-second protection window
+                                                    recentlyRemovedAyahRefs.remove(ayahRef)
+                                                }
+                                            }
+
                                             // Remove the specific bookmark that was clicked
                                             viewModel.removeBookmark(quranRepository, bookmark)
                                             Toast.makeText(
@@ -429,6 +441,10 @@ fun QuranReaderApp(viewModel: QuranViewModel = viewModel()) {
                             onSaveProgress = { updatedSettings ->
                                 currentMemorizationSettings = updatedSettings
                                 quranRepository.saveMemorizationSettings(updatedSettings)
+                            },
+                            onNavigateToPage = { page ->
+                                // Navigate to the page containing the current ayah
+                                currentPage = page
                             },
                             isNavigationVisible = isNavigationVisible
                     )
@@ -920,14 +936,9 @@ fun QuranPageContent(
                         // Use absolute offset with the scaled coordinates
                         Box(
                                 modifier =
-                                        Modifier.absoluteOffset(
-                                                        x = (finalX.dp + 5.dp),
-                                                        y = scaledTop.dp
-                                                )
-                                                .size(30.dp)
-                                                .zIndex(
-                                                        9999f
-                                                ) // Make sure it's on top of everything
+                                        Modifier.absoluteOffset(x = (finalX.dp), y = scaledTop.dp)
+                                                .size(55.dp)
+                                                .zIndex(9999f)
                         ) {
                             // Bookmark icon with green tint
                             IconButton(
@@ -935,13 +946,13 @@ fun QuranPageContent(
                                         android.util.Log.d(tag, "Ayah bookmark clicked: $ayahRef")
                                         onRemoveBookmark(bookmark)
                                     },
-                                    modifier = Modifier.size(30.dp).align(Alignment.Center)
+                                    modifier = Modifier.size(150.dp).align(Alignment.Center)
                             ) {
                                 Icon(
                                         imageVector = Icons.Filled.Bookmark,
                                         contentDescription = "Ayah Bookmarked",
                                         tint = Color(0x99007A55),
-                                        modifier = Modifier.size(30.dp)
+                                        modifier = Modifier.size(150.dp)
                                 )
                             }
                         }

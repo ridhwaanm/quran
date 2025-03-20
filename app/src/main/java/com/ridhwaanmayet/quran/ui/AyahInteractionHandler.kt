@@ -12,6 +12,7 @@ import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import com.ridhwaanmayet.quran.model.AyahPosition
+import com.ridhwaanmayet.quran.model.Bookmark
 import com.ridhwaanmayet.quran.model.QuranRepository
 import com.ridhwaanmayet.quran.utils.CoordinateMapper
 import java.util.concurrent.atomic.AtomicReference
@@ -33,12 +34,15 @@ import kotlinx.coroutines.withContext
  * Uses the enhanced CoordinateMapper for percentage-based coordinate mapping.
  */
 class AyahInteractionHandler(
-        private val context: Context,
-        private val quranRepository: QuranRepository,
-        private val coordinateMapper: CoordinateMapper = CoordinateMapper()
+    private val context: Context,
+    private val quranRepository: QuranRepository,
+    private val coordinateMapper: CoordinateMapper = CoordinateMapper()
 ) {
     // Scope for long press detection
     private val longPressScope = MainScope()
+
+    // Map to store bookmark safe zones
+    private val bookmarkSafeZones = mutableMapOf<String, List<android.graphics.Rect>>()
 
     // Define gesture states using a state machine approach
     enum class GestureState {
@@ -69,34 +73,34 @@ class AyahInteractionHandler(
 
     /** Initialize ayah position data by extracting from HTML files */
     suspend fun initializeAyahPositions(
-            forceUpdate: Boolean = false,
-            progressCallback: ((Int, Int) -> Unit)? = null
+        forceUpdate: Boolean = false,
+        progressCallback: ((Int, Int) -> Unit)? = null
     ) =
-            withContext(Dispatchers.IO) {
-                Log.d(TAG, "Initializing ayah positions, forceUpdate=$forceUpdate")
+        withContext(Dispatchers.IO) {
+            Log.d(TAG, "Initializing ayah positions, forceUpdate=$forceUpdate")
 
-                // Check if we already have positions data and skip if not forcing update
-                val existingPositions = quranRepository.getAyahPositions()
-                Log.d(TAG, "Existing positions: ${existingPositions.size}")
+            // Check if we already have positions data and skip if not forcing update
+            val existingPositions = quranRepository.getAyahPositions()
+            Log.d(TAG, "Existing positions: ${existingPositions.size}")
 
-                if (!forceUpdate && existingPositions.isNotEmpty()) {
-                    Log.d(TAG, "Using existing positions, skipping initialization")
-                    return@withContext
-                }
-
-                val metadata = quranRepository.loadQuranMetadata()
-                val totalPages = metadata.totalPages
-                Log.d(TAG, "Starting extraction for $totalPages pages")
-
-                // Extract positions from HTML files
-                val positions =
-                        coordinateMapper.extractAyahPositions(context, totalPages, progressCallback)
-                Log.d(TAG, "Extracted ${positions.size} ayah positions")
-
-                // Save to repository
-                quranRepository.addAyahPositions(positions)
-                Log.d(TAG, "Saved positions to repository")
+            if (!forceUpdate && existingPositions.isNotEmpty()) {
+                Log.d(TAG, "Using existing positions, skipping initialization")
+                return@withContext
             }
+
+            val metadata = quranRepository.loadQuranMetadata()
+            val totalPages = metadata.totalPages
+            Log.d(TAG, "Starting extraction for $totalPages pages")
+
+            // Extract positions from HTML files
+            val positions =
+                coordinateMapper.extractAyahPositions(context, totalPages, progressCallback)
+            Log.d(TAG, "Extracted ${positions.size} ayah positions")
+
+            // Save to repository
+            quranRepository.addAyahPositions(positions)
+            Log.d(TAG, "Saved positions to repository")
+        }
 
     /**
      * Find which ayah (if any) was tapped based on coordinates
@@ -109,12 +113,12 @@ class AyahInteractionHandler(
      * @return The ayah reference as a string (e.g. "2:255"), or null if no ayah was found
      */
     suspend fun findAyahAtPosition(
-            page: Int,
-            x: Float,
-            y: Float,
-            containerSize: Size,
-            pageImageSize: Size? = null,
-            pageOffset: Offset = Offset.Zero
+        page: Int,
+        x: Float,
+        y: Float,
+        containerSize: Size,
+        pageImageSize: Size? = null,
+        pageOffset: Offset = Offset.Zero
     ): String? {
         // Use the provided page image size or fall back to container size
         val sizeToUse = pageImageSize ?: containerSize
@@ -132,97 +136,97 @@ class AyahInteractionHandler(
 
     /** Store an ayah position in the repository for future reference */
     private suspend fun saveAyahPosition(ayahRef: String, page: Int) =
-            withContext(Dispatchers.IO) {
-                Log.d(TAG, "Saving ayah position: ayahRef=$ayahRef, page=$page")
+        withContext(Dispatchers.IO) {
+            Log.d(TAG, "Saving ayah position: ayahRef=$ayahRef, page=$page")
 
-                // Parse the ayah reference
-                val parts = ayahRef.split(":")
-                if (parts.size == 2) {
-                    val surahNumber = parts[0].toIntOrNull()
-                    val ayahNumber = parts[1].toIntOrNull()
+            // Parse the ayah reference
+            val parts = ayahRef.split(":")
+            if (parts.size == 2) {
+                val surahNumber = parts[0].toIntOrNull()
+                val ayahNumber = parts[1].toIntOrNull()
 
-                    Log.d(TAG, "Parsed reference: surah=$surahNumber, ayah=$ayahNumber")
+                Log.d(TAG, "Parsed reference: surah=$surahNumber, ayah=$ayahNumber")
 
-                    if (surahNumber != null && ayahNumber != null) {
-                        val position =
-                                AyahPosition(
-                                        surahNumber = surahNumber,
-                                        ayahNumber = ayahNumber,
-                                        startPage = page
-                                )
-                        quranRepository.addAyahPosition(position)
-                        Log.d(TAG, "Saved position to repository")
-                    } else {
-                        Log.e(TAG, "Failed to parse surah or ayah number from $ayahRef")
-                    }
+                if (surahNumber != null && ayahNumber != null) {
+                    val position =
+                        AyahPosition(
+                            surahNumber = surahNumber,
+                            ayahNumber = ayahNumber,
+                            startPage = page
+                        )
+                    quranRepository.addAyahPosition(position)
+                    Log.d(TAG, "Saved position to repository")
                 } else {
-                    Log.e(TAG, "Invalid ayah reference format: $ayahRef")
+                    Log.e(TAG, "Failed to parse surah or ayah number from $ayahRef")
                 }
+            } else {
+                Log.e(TAG, "Invalid ayah reference format: $ayahRef")
             }
+        }
 
     /** Navigate to a specific ayah */
     suspend fun navigateToAyah(ayahRef: String): Int? =
-            withContext(Dispatchers.IO) {
-                Log.d(TAG, "Navigating to ayah: $ayahRef")
+        withContext(Dispatchers.IO) {
+            Log.d(TAG, "Navigating to ayah: $ayahRef")
 
-                // First try to get from repository
-                var startPage = quranRepository.getAyahStartPageByRef(ayahRef)
-                if (startPage != null) {
-                    Log.d(TAG, "Found page in repository: $startPage")
-                    return@withContext startPage
-                }
-
-                // If not found in repository, try to compute it
-                val parts = ayahRef.split(":")
-                if (parts.size != 2) {
-                    Log.e(TAG, "Invalid ayah reference format: $ayahRef")
-                    return@withContext null
-                }
-
-                val surahNumber = parts[0].toIntOrNull() ?: return@withContext null
-                val verseNumber = parts[1].toIntOrNull() ?: return@withContext null
-                Log.d(TAG, "Parsed reference: surah=$surahNumber, verse=$verseNumber")
-
-                // Get the surah info to know its page range
-                val surah = quranRepository.getSurahByNumber(surahNumber)
-                if (surah == null) {
-                    Log.e(TAG, "Surah not found: $surahNumber")
-                    return@withContext null
-                }
-
-                // Get the next surah to determine the end page of the current surah
-                val metadata = quranRepository.loadQuranMetadata()
-                val nextSurah = metadata.surahs.find { it.number == surahNumber + 1 }
-                val endPage = nextSurah?.startPage?.minus(1) ?: metadata.totalPages
-                Log.d(TAG, "Searching in page range: ${surah.startPage} to $endPage")
-
-                // Load ayah areas for all relevant pages
-                val pagesAreas =
-                        coordinateMapper.loadAyahAreasForPages(context, surah.startPage, endPage)
-                Log.d(TAG, "Loaded areas for ${pagesAreas.size} pages")
-
-                // Scan through pages to find the ayah
-                for (pageEntry in pagesAreas) {
-                    val page = pageEntry.key
-                    val areas = pageEntry.value
-                    Log.d(TAG, "Page $page has ${areas.size} areas")
-
-                    if (areas.any { it.surahNumber == surahNumber && it.verseNumber == verseNumber }
-                    ) {
-                        // Found the ayah on this page
-                        Log.d(TAG, "Found ayah on page $page")
-
-                        // Save for future use
-                        saveAyahPosition(ayahRef, page)
-
-                        return@withContext page
-                    }
-                }
-
-                // Fallback to the start of the surah if ayah not found
-                Log.d(TAG, "Ayah not found, falling back to surah start page: ${surah.startPage}")
-                return@withContext surah.startPage
+            // First try to get from repository
+            var startPage = quranRepository.getAyahStartPageByRef(ayahRef)
+            if (startPage != null) {
+                Log.d(TAG, "Found page in repository: $startPage")
+                return@withContext startPage
             }
+
+            // If not found in repository, try to compute it
+            val parts = ayahRef.split(":")
+            if (parts.size != 2) {
+                Log.e(TAG, "Invalid ayah reference format: $ayahRef")
+                return@withContext null
+            }
+
+            val surahNumber = parts[0].toIntOrNull() ?: return@withContext null
+            val verseNumber = parts[1].toIntOrNull() ?: return@withContext null
+            Log.d(TAG, "Parsed reference: surah=$surahNumber, verse=$verseNumber")
+
+            // Get the surah info to know its page range
+            val surah = quranRepository.getSurahByNumber(surahNumber)
+            if (surah == null) {
+                Log.e(TAG, "Surah not found: $surahNumber")
+                return@withContext null
+            }
+
+            // Get the next surah to determine the end page of the current surah
+            val metadata = quranRepository.loadQuranMetadata()
+            val nextSurah = metadata.surahs.find { it.number == surahNumber + 1 }
+            val endPage = nextSurah?.startPage?.minus(1) ?: metadata.totalPages
+            Log.d(TAG, "Searching in page range: ${surah.startPage} to $endPage")
+
+            // Load ayah areas for all relevant pages
+            val pagesAreas =
+                coordinateMapper.loadAyahAreasForPages(context, surah.startPage, endPage)
+            Log.d(TAG, "Loaded areas for ${pagesAreas.size} pages")
+
+            // Scan through pages to find the ayah
+            for (pageEntry in pagesAreas) {
+                val page = pageEntry.key
+                val areas = pageEntry.value
+                Log.d(TAG, "Page $page has ${areas.size} areas")
+
+                if (areas.any { it.surahNumber == surahNumber && it.verseNumber == verseNumber }
+                ) {
+                    // Found the ayah on this page
+                    Log.d(TAG, "Found ayah on page $page")
+
+                    // Save for future use
+                    saveAyahPosition(ayahRef, page)
+
+                    return@withContext page
+                }
+            }
+
+            // Fallback to the start of the surah if ayah not found
+            Log.d(TAG, "Ayah not found, falling back to surah start page: ${surah.startPage}")
+            return@withContext surah.startPage
+        }
 
     // Clean up coroutine scope when no longer needed
     fun cleanup() {
@@ -243,12 +247,12 @@ class AyahInteractionHandler(
      * @return List of coordinate rectangles for the ayah
      */
     suspend fun getAyahRects(
-            context: Context,
-            pageNumber: Int,
-            ayahRef: String,
-            containerSize: Size,
-            pageImageSize: Size? = null,
-            pageOffset: Offset = Offset.Zero
+        context: Context,
+        pageNumber: Int,
+        ayahRef: String,
+        containerSize: Size,
+        pageImageSize: Size? = null,
+        pageOffset: Offset = Offset.Zero
     ): List<android.graphics.Rect> {
         val sizeToUse = pageImageSize ?: containerSize
         return coordinateMapper.getAyahRects(context, pageNumber, ayahRef, sizeToUse, pageOffset)
@@ -266,277 +270,339 @@ class AyahInteractionHandler(
      * @return Center point as an Offset, or null if ayah not found
      */
     suspend fun getAyahCenterPoint(
-            context: Context,
-            pageNumber: Int,
-            ayahRef: String,
-            containerSize: Size,
-            pageImageSize: Size? = null,
-            pageOffset: Offset = Offset.Zero
+        context: Context,
+        pageNumber: Int,
+        ayahRef: String,
+        containerSize: Size,
+        pageImageSize: Size? = null,
+        pageOffset: Offset = Offset.Zero
     ): Offset? {
         val sizeToUse = pageImageSize ?: containerSize
         return coordinateMapper.getAyahCenterPoint(
-                context,
-                pageNumber,
-                ayahRef,
-                sizeToUse,
-                pageOffset
+            context,
+            pageNumber,
+            ayahRef,
+            sizeToUse,
+            pageOffset
         )
+    }
+
+    // Compute and store the hit areas for bookmarks
+    private suspend fun updateBookmarkSafeZones(
+        currentPage: Int,
+        bookmarks: List<Bookmark>,
+        displaySize: Size,
+        imageSize: Size
+    ) {
+        bookmarkSafeZones.clear()
+
+        val ayahBookmarks = bookmarks.filter { it.page == currentPage && it.ayahRef != null }
+        for (bookmark in ayahBookmarks) {
+            bookmark.ayahRef?.let { ayahRef ->
+                // Get rects for this ayah
+                val rects = getAyahRects(context, currentPage, ayahRef, displaySize, imageSize)
+                if (rects.isNotEmpty()) {
+                    // Store with some padding to create a "safe zone" around the bookmark
+                    val paddedRects = rects.map { rect ->
+                        val paddedRect = android.graphics.Rect(rect)
+                        paddedRect.inset(-40, -40) // Add 40px padding all around
+                        paddedRect
+                    }
+                    bookmarkSafeZones[ayahRef] = paddedRects
+                }
+            }
+        }
+
+        Log.d(TAG, "Updated bookmark safe zones with ${bookmarkSafeZones.size} bookmarks")
+    }
+
+    // Check if a touch point is within a bookmark safe zone
+    private fun isTouchingBookmark(touchPoint: Offset): Boolean {
+        for ((_, rects) in bookmarkSafeZones) {
+            for (rect in rects) {
+                if (rect.contains(touchPoint.x.toInt(), touchPoint.y.toInt())) {
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     /** Creates a Modifier that handles all touch interactions for the Quran page */
     fun handleAyahInteractions(
-            modifier: Modifier = Modifier,
-            currentPage: Int,
-            displaySize: Size,
-            onTap: () -> Unit,
-            onSwipeLeft: () -> Unit,
-            onSwipeRight: () -> Unit,
-            onAyahLongPress: (String) -> Unit,
-            actualImageSize: Size? = null,
-            pageOffset: Offset = Offset.Zero
+        modifier: Modifier = Modifier,
+        currentPage: Int,
+        displaySize: Size,
+        onTap: () -> Unit,
+        onSwipeLeft: () -> Unit,
+        onSwipeRight: () -> Unit,
+        onAyahLongPress: (String) -> Unit,
+        actualImageSize: Size? = null,
+        pageOffset: Offset = Offset.Zero,
+        pageBookmarks: List<Bookmark> = emptyList()
     ): Modifier =
-            modifier.pointerInput(currentPage, displaySize, actualImageSize, pageOffset) {
-                Log.d(
-                        TAG,
-                        "Setting up pointer input handler for page $currentPage, display size: $displaySize"
-                )
+        modifier.pointerInput(currentPage, displaySize, actualImageSize, pageOffset, pageBookmarks) {
+            Log.d(
+                TAG,
+                "Setting up pointer input handler for page $currentPage, display size: $displaySize"
+            )
 
-                if (actualImageSize != null) {
-                    Log.d(TAG, "Actual rendered image size: $actualImageSize")
-                }
+            if (actualImageSize != null) {
+                Log.d(TAG, "Actual rendered image size: $actualImageSize")
+            }
 
-                Log.d(TAG, "Page offset: $pageOffset")
+            Log.d(TAG, "Page offset: $pageOffset")
 
-                awaitEachGesture {
-                    // Reset state machine for each new gesture
-                    currentState.set(GestureState.IDLE)
-                    Log.d(TAG, "Starting new gesture cycle, state=${currentState.get()}")
+            // Update bookmark safe zones - cache the hit areas for bookmarks
+            updateBookmarkSafeZones(currentPage, pageBookmarks, displaySize, actualImageSize ?: displaySize)
 
-                    try {
-                        // Handle initial touch down
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        Log.d(TAG, "Pointer down at ${down.position}")
+            awaitEachGesture {
+                // Reset state machine for each new gesture
+                currentState.set(GestureState.IDLE)
+                Log.d(TAG, "Starting new gesture cycle, state=${currentState.get()}")
 
-                        // Move to TOUCH_DOWN state
-                        currentState.set(GestureState.TOUCH_DOWN)
+                try {
+                    // Handle initial touch down
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    Log.d(TAG, "Pointer down at ${down.position}")
 
-                        // Initial position
-                        val startPos = down.position
-                        var currentPos = startPos
-                        var finalPos = startPos
+                    // Check if we're tapping near a bookmark indicator
+                    val touchingBookmark = isTouchingBookmark(down.position)
+                    if (touchingBookmark) {
+                        Log.d(TAG, "Touch is in bookmark area, skipping long press detection")
+                        // We let the pointer event continue but won't start long press detection
+                        currentState.set(GestureState.POTENTIAL_TAP)
+                        // Wait for pointer up
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Main)
+                            val change = event.changes.firstOrNull()
+                            if (change == null || change.changedToUp()) break
+                        }
+                        // Trigger tap anyway to ensure navigation controls work
+                        onTap()
+                        return@awaitEachGesture
+                    }
 
-                        // Create a separate job for long press detection
-                        val longPressJob =
-                                longPressScope.launch {
-                                    try {
-                                        Log.d(TAG, "Starting long press detection")
-                                        delay(LONG_PRESS_DURATION)
+                    // Move to TOUCH_DOWN state
+                    currentState.set(GestureState.TOUCH_DOWN)
 
-                                        // Only proceed if we're still in a valid state for long
-                                        // press
-                                        val state = currentState.get()
-                                        if (state == GestureState.TOUCH_DOWN ||
-                                                        state == GestureState.POTENTIAL_TAP
-                                        ) {
-                                            Log.d(
-                                                    TAG,
-                                                    "Long press timeout reached, current state=$state"
+                    // Initial position
+                    val startPos = down.position
+                    var currentPos = startPos
+                    var finalPos = startPos
+
+                    // Create a separate job for long press detection
+                    val longPressJob =
+                        longPressScope.launch {
+                            try {
+                                Log.d(TAG, "Starting long press detection")
+                                delay(LONG_PRESS_DURATION)
+
+                                // Only proceed if we're still in a valid state for long
+                                // press
+                                val state = currentState.get()
+                                if (state == GestureState.TOUCH_DOWN ||
+                                    state == GestureState.POTENTIAL_TAP
+                                ) {
+                                    Log.d(
+                                        TAG,
+                                        "Long press timeout reached, current state=$state"
+                                    )
+
+                                    // Try to atomically transition to LONG_PRESS_DETECTED
+                                    if (currentState.compareAndSet(
+                                            state,
+                                            GestureState.LONG_PRESS_DETECTED
+                                        )
+                                    ) {
+                                        Log.d(
+                                            TAG,
+                                            "Long press detected at $startPos, transitioning to LONG_PRESS_DETECTED"
+                                        )
+
+                                        // Find which ayah was pressed
+                                        val ayahRef =
+                                            findAyahAtPosition(
+                                                currentPage,
+                                                startPos.x,
+                                                startPos.y,
+                                                displaySize,
+                                                actualImageSize,
+                                                pageOffset
                                             )
 
-                                            // Try to atomically transition to LONG_PRESS_DETECTED
-                                            if (currentState.compareAndSet(
-                                                            state,
-                                                            GestureState.LONG_PRESS_DETECTED
-                                                    )
-                                            ) {
-                                                Log.d(
-                                                        TAG,
-                                                        "Long press detected at $startPos, transitioning to LONG_PRESS_DETECTED"
-                                                )
-
-                                                // Find which ayah was pressed
-                                                val ayahRef =
-                                                        findAyahAtPosition(
-                                                                currentPage,
-                                                                startPos.x,
-                                                                startPos.y,
-                                                                displaySize,
-                                                                actualImageSize,
-                                                                pageOffset
-                                                        )
-
-                                                // Trigger long press callback and save ayah
-                                                // position
-                                                if (ayahRef != null) {
-                                                    Log.d(TAG, "Long press on ayah: $ayahRef")
-                                                    // Save the ayah position to the repository
-                                                    saveAyahPosition(ayahRef, currentPage)
-                                                    // Trigger callback
-                                                    onAyahLongPress(ayahRef)
-                                                } else {
-                                                    Log.d(
-                                                            TAG,
-                                                            "Long press did not find an ayah at position"
-                                                    )
-                                                }
-                                            } else {
-                                                Log.d(
-                                                        TAG,
-                                                        "State changed during long press detection, aborting long press"
-                                                )
-                                            }
+                                        // Trigger long press callback and save ayah
+                                        // position
+                                        if (ayahRef != null) {
+                                            Log.d(TAG, "Long press on ayah: $ayahRef")
+                                            // Save the ayah position to the repository
+                                            saveAyahPosition(ayahRef, currentPage)
+                                            // Trigger callback
+                                            onAyahLongPress(ayahRef)
                                         } else {
                                             Log.d(
-                                                    TAG,
-                                                    "State changed to $state, aborting long press"
+                                                TAG,
+                                                "Long press did not find an ayah at position"
                                             )
                                         }
-                                    } catch (e: CancellationException) {
-                                        Log.d(TAG, "Long press detection cancelled")
-                                    } catch (e: Exception) {
-                                        Log.e(TAG, "Error in long press detection: ${e.message}")
-                                    }
-                                }
-
-                        // Move to the POTENTIAL_TAP state after starting long press job
-                        if (currentState.compareAndSet(
-                                        GestureState.TOUCH_DOWN,
-                                        GestureState.POTENTIAL_TAP
-                                )
-                        ) {
-                            Log.d(TAG, "Transitioning to POTENTIAL_TAP state")
-                        }
-
-                        // Track movement until pointer is up
-                        var change: PointerInputChange? = null
-                        try {
-                            while (true) {
-                                val event = awaitPointerEvent(PointerEventPass.Main)
-                                change = event.changes.firstOrNull()
-
-                                // No pointer found, break the loop
-                                if (change == null) {
-                                    Log.d(TAG, "No pointer found, breaking tracking loop")
-                                    break
-                                }
-
-                                currentPos = change.position
-
-                                // Check if we've moved beyond the tap threshold
-                                val distance = (currentPos - startPos).getDistance()
-                                val currentGestureState = currentState.get()
-
-                                if (distance > TAP_THRESHOLD &&
-                                                (currentGestureState ==
-                                                        GestureState.POTENTIAL_TAP ||
-                                                        currentGestureState ==
-                                                                GestureState.TOUCH_DOWN)
-                                ) {
-                                    Log.d(TAG, "Movement detected beyond threshold: $distance")
-
-                                    // Try to transition to DRAGGING state
-                                    if (currentState.compareAndSet(
-                                                    currentGestureState,
-                                                    GestureState.DRAGGING
-                                            )
-                                    ) {
-                                        Log.d(TAG, "Transitioning to DRAGGING state")
-                                        // Cancel long press detection as we're now dragging
-                                        longPressJob.cancel()
                                     } else {
                                         Log.d(
-                                                TAG,
-                                                "Failed to transition to DRAGGING, current state=${currentState.get()}"
+                                            TAG,
+                                            "State changed during long press detection, aborting long press"
                                         )
                                     }
-                                }
-
-                                // If pointer is up, end tracking
-                                if (change.changedToUp()) {
-                                    Log.d(TAG, "Pointer up at $currentPos")
-                                    finalPos = currentPos
-                                    break
-                                }
-                            }
-                        } finally {
-                            // Always ensure we cancel the long press job when tracking ends
-                            longPressJob.cancel()
-                        }
-
-                        // Process the gesture based on final state
-                        when (currentState.get()) {
-                            GestureState.POTENTIAL_TAP -> {
-                                // This was a simple tap (no drag detected, no long press)
-                                Log.d(TAG, "Gesture ended in POTENTIAL_TAP state, triggering tap")
-                                currentState.set(GestureState.COMPLETED)
-                                onTap()
-                            }
-                            GestureState.DRAGGING -> {
-                                // Calculate the drag distance and direction
-                                val deltaX = finalPos.x - startPos.x
-                                val deltaY = abs(finalPos.y - startPos.y)
-                                Log.d(
-                                        TAG,
-                                        "Gesture ended in DRAGGING state: deltaX=$deltaX, deltaY=$deltaY"
-                                )
-
-                                // Determine if it's a valid horizontal swipe
-                                val isHorizontalSwipe =
-                                        abs(deltaX) > MIN_SWIPE_DISTANCE &&
-                                                deltaY < abs(deltaX) * MAX_VERTICAL_RATIO
-
-                                currentState.set(GestureState.COMPLETED)
-
-                                if (isHorizontalSwipe) {
-                                    if (deltaX > 0) {
-                                        // Swipe right (RTL: next page)
-                                        Log.d(TAG, "Swipe right detected")
-                                        onSwipeRight()
-                                    } else {
-                                        // Swipe left (RTL: previous page)
-                                        Log.d(TAG, "Swipe left detected")
-                                        onSwipeLeft()
-                                    }
                                 } else {
-                                    // If not a clear directional swipe, it might be a tap
-                                    val totalDistance = (finalPos - startPos).getDistance()
-                                    if (totalDistance < TAP_THRESHOLD) {
-                                        Log.d(TAG, "Small movement treated as tap")
-                                        onTap()
-                                    } else {
-                                        Log.d(TAG, "Indeterminate gesture, not processing")
-                                    }
+                                    Log.d(
+                                        TAG,
+                                        "State changed to $state, aborting long press"
+                                    )
                                 }
-                            }
-                            GestureState.LONG_PRESS_DETECTED -> {
-                                // Long press was already handled in the long press job
-                                Log.d(
-                                        TAG,
-                                        "Gesture ended in LONG_PRESS_DETECTED state, already handled"
-                                )
-                                currentState.set(GestureState.COMPLETED)
-                            }
-                            else -> {
-                                // Unexpected end state, log it
-                                Log.d(
-                                        TAG,
-                                        "Gesture ended in unexpected state: ${currentState.get()}"
-                                )
-                                currentState.set(GestureState.COMPLETED)
+                            } catch (e: CancellationException) {
+                                Log.d(TAG, "Long press detection cancelled")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error in long press detection: ${e.message}")
                             }
                         }
-                    } catch (e: CancellationException) {
-                        // Gesture tracking was cancelled, clean up
-                        Log.d(TAG, "Gesture tracking cancelled")
-                        currentState.set(GestureState.COMPLETED)
-                    } catch (e: Exception) {
-                        // Add general exception handling
-                        Log.e(TAG, "Error in gesture handling: ${e.message}")
-                        currentState.set(GestureState.COMPLETED)
-                    } finally {
-                        // Always clean up and reset state
-                        Log.d(TAG, "Gesture cycle complete, final state=${currentState.get()}")
+
+                    // Move to the POTENTIAL_TAP state after starting long press job
+                    if (currentState.compareAndSet(
+                            GestureState.TOUCH_DOWN,
+                            GestureState.POTENTIAL_TAP
+                        )
+                    ) {
+                        Log.d(TAG, "Transitioning to POTENTIAL_TAP state")
                     }
+
+                    // Track movement until pointer is up
+                    var change: PointerInputChange? = null
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Main)
+                            change = event.changes.firstOrNull()
+
+                            // No pointer found, break the loop
+                            if (change == null) {
+                                Log.d(TAG, "No pointer found, breaking tracking loop")
+                                break
+                            }
+
+                            currentPos = change.position
+
+                            // Check if we've moved beyond the tap threshold
+                            val distance = (currentPos - startPos).getDistance()
+                            val currentGestureState = currentState.get()
+
+                            if (distance > TAP_THRESHOLD &&
+                                (currentGestureState ==
+                                        GestureState.POTENTIAL_TAP ||
+                                        currentGestureState ==
+                                        GestureState.TOUCH_DOWN)
+                            ) {
+                                Log.d(TAG, "Movement detected beyond threshold: $distance")
+
+                                // Try to transition to DRAGGING state
+                                if (currentState.compareAndSet(
+                                        currentGestureState,
+                                        GestureState.DRAGGING
+                                    )
+                                ) {
+                                    Log.d(TAG, "Transitioning to DRAGGING state")
+                                    // Cancel long press detection as we're now dragging
+                                    longPressJob.cancel()
+                                } else {
+                                    Log.d(
+                                        TAG,
+                                        "Failed to transition to DRAGGING, current state=${currentState.get()}"
+                                    )
+                                }
+                            }
+
+                            // If pointer is up, end tracking
+                            if (change.changedToUp()) {
+                                Log.d(TAG, "Pointer up at $currentPos")
+                                finalPos = currentPos
+                                break
+                            }
+                        }
+                    } finally {
+                        // Always ensure we cancel the long press job when tracking ends
+                        longPressJob.cancel()
+                    }
+
+                    // Process the gesture based on final state
+                    when (currentState.get()) {
+                        GestureState.POTENTIAL_TAP -> {
+                            // This was a simple tap (no drag detected, no long press)
+                            Log.d(TAG, "Gesture ended in POTENTIAL_TAP state, triggering tap")
+                            currentState.set(GestureState.COMPLETED)
+                            onTap()
+                        }
+                        GestureState.DRAGGING -> {
+                            // Calculate the drag distance and direction
+                            val deltaX = finalPos.x - startPos.x
+                            val deltaY = abs(finalPos.y - startPos.y)
+                            Log.d(
+                                TAG,
+                                "Gesture ended in DRAGGING state: deltaX=$deltaX, deltaY=$deltaY"
+                            )
+
+                            // Determine if it's a valid horizontal swipe
+                            val isHorizontalSwipe =
+                                abs(deltaX) > MIN_SWIPE_DISTANCE &&
+                                        deltaY < abs(deltaX) * MAX_VERTICAL_RATIO
+
+                            currentState.set(GestureState.COMPLETED)
+
+                            if (isHorizontalSwipe) {
+                                if (deltaX > 0) {
+                                    // Swipe right (RTL: next page)
+                                    Log.d(TAG, "Swipe right detected")
+                                    onSwipeRight()
+                                } else {
+                                    // Swipe left (RTL: previous page)
+                                    Log.d(TAG, "Swipe left detected")
+                                    onSwipeLeft()
+                                }
+                            } else {
+                                // If not a clear directional swipe, it might be a tap
+                                val totalDistance = (finalPos - startPos).getDistance()
+                                if (totalDistance < TAP_THRESHOLD) {
+                                    Log.d(TAG, "Small movement treated as tap")
+                                    onTap()
+                                } else {
+                                    Log.d(TAG, "Indeterminate gesture, not processing")
+                                }
+                            }
+                        }
+                        GestureState.LONG_PRESS_DETECTED -> {
+                            // Long press was already handled in the long press job
+                            Log.d(
+                                TAG,
+                                "Gesture ended in LONG_PRESS_DETECTED state, already handled"
+                            )
+                            currentState.set(GestureState.COMPLETED)
+                        }
+                        else -> {
+                            // Unexpected end state, log it
+                            Log.d(
+                                TAG,
+                                "Gesture ended in unexpected state: ${currentState.get()}"
+                            )
+                            currentState.set(GestureState.COMPLETED)
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    // Gesture tracking was cancelled, clean up
+                    Log.d(TAG, "Gesture tracking cancelled")
+                    currentState.set(GestureState.COMPLETED)
+                } catch (e: Exception) {
+                    // Add general exception handling
+                    Log.e(TAG, "Error in gesture handling: ${e.message}")
+                    currentState.set(GestureState.COMPLETED)
+                } finally {
+                    // Always clean up and reset state
+                    Log.d(TAG, "Gesture cycle complete, final state=${currentState.get()}")
                 }
             }
+        }
 }

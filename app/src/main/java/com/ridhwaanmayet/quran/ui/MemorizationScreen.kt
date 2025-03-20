@@ -1,5 +1,6 @@
 package com.ridhwaanmayet.quran.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -9,18 +10,22 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.ridhwaanmayet.quran.model.MemorizationSettings
 import com.ridhwaanmayet.quran.model.QuranMetadata
 import com.ridhwaanmayet.quran.model.QuranRepository
+import com.ridhwaanmayet.quran.model.Surah
+import com.ridhwaanmayet.quran.utils.QuranAudioDownloader
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,7 +36,17 @@ fun MemorizationScreen(
         onNavigateBack: () -> Unit,
         onStartMemorization: (MemorizationSettings) -> Unit
 ) {
+    val context = LocalContext.current
     val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
+    val audioDownloader = remember { QuranAudioDownloader(context) }
+
+    // Download dialog state
+    var showDownloadDialog by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableStateOf(0f) }
+    var isDownloading by remember { mutableStateOf(false) }
+    var settingsToStart by remember { mutableStateOf<MemorizationSettings?>(null) }
+    var currentDownloadSurah by remember { mutableStateOf<Surah?>(null) }
 
     // Get the initial surah based on lastMemorizedSettings or default to Surah Al-Fatiha
     val initialSurah = remember {
@@ -65,6 +80,32 @@ fun MemorizationScreen(
     // State for surah search
     var showSurahSearch by remember { mutableStateOf(false) }
     var surahSearchQuery by remember { mutableStateOf("") }
+
+    // Function to check if audio files are available and start memorization or download
+    fun checkAndStartMemorization(settings: MemorizationSettings) {
+        settingsToStart = settings
+        val surah = quranMetadata.surahs.find { it.number == settings.surahNumber }
+
+        if (surah != null) {
+            currentDownloadSurah = surah
+            coroutineScope.launch {
+                val audioAvailable = audioDownloader.isSurahComplete(surah.number)
+
+                if (audioAvailable) {
+                    // Audio files are available, proceed to start memorization
+                    onStartMemorization(settings)
+                } else {
+                    // Audio files need to be downloaded
+                    downloadProgress = 0f
+                    isDownloading = false
+                    showDownloadDialog = true
+                }
+            }
+        } else {
+            // Fallback if surah not found (shouldn't happen with proper UI validation)
+            Toast.makeText(context, "Invalid surah selected", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     // Filtered surahs based on search query
     val filteredSurahs =
@@ -101,6 +142,95 @@ fun MemorizationScreen(
 
     // Check if all inputs are valid
     val isValid = !startAyahError && !endAyahError && !repeatCountError
+
+    // Download Dialog
+    if (showDownloadDialog && currentDownloadSurah != null) {
+        Dialog(
+                onDismissRequest = {
+                    if (!isDownloading) {
+                        showDownloadDialog = false
+                    }
+                }
+        ) {
+            Card(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                Column(
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(text = "Audio Files Required", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                            text =
+                                    "Audio files for ${currentDownloadSurah!!.englishName} need to be downloaded before memorization.",
+                            style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    if (isDownloading) {
+                        LinearProgressIndicator(
+                                progress = { downloadProgress },
+                                modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                                text = "${(downloadProgress * 100).toInt()}%",
+                                style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                                onClick = {
+                                    showDownloadDialog = false
+                                    settingsToStart = null
+                                    currentDownloadSurah = null
+                                },
+                                enabled = !isDownloading
+                        ) { Text("Cancel") }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        isDownloading = true
+
+                                        // Start the download
+                                        val success =
+                                                audioDownloader.downloadSurah(
+                                                        currentDownloadSurah!!.number
+                                                ) { downloaded, total ->
+                                                    downloadProgress = downloaded.toFloat() / total
+                                                }
+
+                                        isDownloading = false
+                                        showDownloadDialog = false
+
+                                        if (success && settingsToStart != null) {
+                                            // Download successful, proceed with memorization
+                                            onStartMemorization(settingsToStart!!)
+                                        } else {
+                                            // Download failed
+                                            Toast.makeText(
+                                                            context,
+                                                            "Failed to download audio files. Please try again.",
+                                                            Toast.LENGTH_SHORT
+                                                    )
+                                                    .show()
+                                        }
+
+                                        // Reset state
+                                        settingsToStart = null
+                                        currentDownloadSurah = null
+                                    }
+                                },
+                                enabled = !isDownloading
+                        ) { Text("Download") }
+                    }
+                }
+            }
+        }
+    }
 
     Scaffold(
             topBar = {
@@ -247,7 +377,7 @@ fun MemorizationScreen(
             // Start Button
             Button(
                     onClick = {
-                        onStartMemorization(
+                        val settings =
                                 MemorizationSettings(
                                         surahNumber = selectedSurah.number,
                                         startAyah = startAyah.toIntOrNull() ?: 1,
@@ -255,7 +385,9 @@ fun MemorizationScreen(
                                         repeatCount = repeatCount.toIntOrNull() ?: 3,
                                         loopSection = loopSection
                                 )
-                        )
+
+                        // Check if audio files exist, otherwise show download dialog
+                        checkAndStartMemorization(settings)
                     },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = isValid
